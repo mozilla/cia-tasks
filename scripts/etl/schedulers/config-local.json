@@ -1,0 +1,65 @@
+{
+  "start": "today-2day",
+  "interval": "6hour",
+  "range": {
+    "min": "today-3week",
+    "max": "today-1day"
+  },
+  "branches": "autoland",
+  "config_db": {
+    "filename": "config.sqlite",
+    "upgrade": false
+  },
+  "destination": {
+    "account_info": {
+      "$ref": "file:///e:/moz-fx-dev-ekyle-treeherder-a838a7718652.json"
+    },
+    "dataset": "dev-scheduling",
+    "table": "schedulers",
+    "schema": {
+      "push.id._i_": "integer",
+      "push.date._t_": "time",
+      "etl.timestamp._t_": "time"
+    },
+    "top_level_fields": {
+      "push.id": "_push_id",
+      "push.date": "_push_date",
+      "etl.timestamp": "_etl_timestamp"
+    },
+    "partition": {
+      "field": "push.date",
+      "expire": "2year"
+    },
+    "id": {
+      "field": "push.id",
+      "version": "etl.timestamp"
+    },
+    "cluster": [
+      "push.id"
+    ],
+    "sharded": true
+  },
+  "adr": {
+    "verbose": 0,
+    "url": "https://activedata.allizom.org/query",
+    "cache": {
+      "retention": 10080,  // minutes
+      "serializer": "json",
+      "stores": {
+        "file_cache": {
+          "driver": "file",
+          "path": ".cache"
+        },
+      }
+    }
+  },
+  "constants": {
+    "jx_bigquery.bigquery.DEBUG": true,
+    "mozci.util.req.DEFAULT_RETRIES": 5,
+    "mozci.util.req.DEFAULT_BACKOFF_FACTOR": 5,
+    "logs.LOG_LEVEL": 10,  //10=DEBUG, 20=INFO
+  },
+  "debug": {
+    "trace": true
+  }
+}
