@@ -35,6 +35,8 @@ secret you can then create your own.
 
 ### Retrieving secrets locally
 
+#### Via official binaries (Mac & Linux)
+
 To test *locally* that your script can fetch secrets you will have to [download a binary](https://github.com/taskcluster/taskcluster/tree/master/clients/client-shell#readme)
 to set up your credentials. Unfortunately, this only works for Linux and Windows (filed [issue](https://github.com/mozilla/cia-tasks/issues/7)).
 
@@ -57,6 +59,21 @@ secrets = taskcluster.Secrets(taskcluster.optionsFromEnvironment())
 secret = secrets.get("project/cia/garbage/foo")
 print(secret["secret"])
 ```
+
+#### Via script
+
+This WIP.
+
+On Mac OS X it might prompt to grant a Firewall permission.
+
+```shell
+cd utils
+# This will open a browser tab, sign in and save the generated client
+# Upon saving you can close the tab and return to the command line
+poetry run generate_client.py
+# TBD
+```
+
 
 ## How this is set up
 
