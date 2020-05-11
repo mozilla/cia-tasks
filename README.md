@@ -11,4 +11,6 @@ There are a number of small tasks that must be run to process and transform data
 
 ## Solution
 
-[The Community TaskCluster!](https://community-tc.services.mozilla.com/)  This will repo will contain the source code for a number of scripts that can run as a task on the community cluster 
+[The Community TaskCluster!](https://community-tc.services.mozilla.com/)  This will repo will contain the source code for a number of scripts that can run as a task on the community cluster
+
+

@@ -80,7 +80,7 @@ print(secrets.get("project/cia/garbage/foo"))
 
 #### Create Role
 
-You must [create a Role](https://community-tc.services.mozilla.com/auth/roles/create) for the hook; you will give it the scopes needed to accesc the secrets
+You must [create a Role](https://community-tc.services.mozilla.com/auth/roles/create) for the hook; then you will give it the scopes needed to access the secrets
 
 * **Role ID** - Some name, starting with `hook-id:` and followed by some reasonable path for your team and project. Example: `hook-id:project-cia/etl-schedulers`
 * **Scopes** List of scopes the role has. Be sure to include the secret name.  Example: `secrets:get:project/cia/smart-scheduling*`
@@ -94,7 +94,6 @@ Hooks are used to trigger tasks, and you must [create a hook](https://community-
 
 In the task template, be sure to `assume:` the Role ID.   
 
-    ```yaml
     scopes:
       - 'assume:hook-id:project-cia/etl-schedulers
 
@@ -111,7 +110,7 @@ print(secrets.get("project/cia/garbage/foo"))
 > **WARNING** The Taskcluster client code attempts to detect the running environment; if it detects it NOT running in taskcluster, it will not accept `TASKCLUSTER_PROXY_URL` environment variable, and things break. 
 
 
-### Retrieving secrets locally (linux only)
+### Using secrets locally (linux only)
 
 To test *locally* that your script can fetch secrets you will have to [download a binary](https://github.com/taskcluster/taskcluster/tree/master/clients/client-shell#readme)
 to set up your credentials. Unfortunately, this only works for Linux (filed [issue](https://github.com/armenzg/smart-scheduling/issues/1)).
@@ -149,7 +148,6 @@ cd utils
 poetry run generate_client.py
 # TBD
 ```
-
 
 ## How this is set up
 
