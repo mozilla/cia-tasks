@@ -44,7 +44,6 @@
     "url": "https://activedata.allizom.org/query",
     "cache": {
       "retention": 10080,  // minutes
-      "serializer": "json",
       "stores": {
         "file_cache": {
           "driver": "file",

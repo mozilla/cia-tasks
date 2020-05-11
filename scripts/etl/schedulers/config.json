@@ -10,12 +10,8 @@
     "filename": "config.sqlite",
     "upgrade": false
   },
-  "treeherder": {
-    "rootUrl": {"$ref": ["env://TASKCLUSTER_PROXY_URL", "env://TASKCLUSTER_ROOT_URL"]},
-    "credentials": {
-      "clientId": {"$ref": "env://TASKCLUSTER_CLIENT_ID"},
-      "accessToken": {"$ref": "env://TASKCLUSTER_ACCESS_TOKEN"}
-    }
+  "taskcluster": {
+    "rootUrl": {"$ref": "env://TASKCLUSTER_PROXY_URL"}
   },
   "destination": {
     "account_info": {

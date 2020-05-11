@@ -61,7 +61,7 @@ def inject_secrets(config):
     ************************************************************************
     """
     with Timer("get secrets"):
-        secrets = taskcluster.Secrets(config.treeherder)
+        secrets = taskcluster.Secrets(config.taskcluster)
         acc = Data()
         for s in listwrap(SECRET_NAMES):
             acc[s] = secrets.get(concat_field(SECRET_PREFIX, s))["secret"]
