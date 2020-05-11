@@ -1,4 +1,4 @@
-cd /smart-scheduling/scripts/etl/schedulers
+cd /cia-tasks/scripts/etl/schedulers
 pip3 --version
 pip3 install -r requirements.txt
 python3 --version

@@ -113,7 +113,7 @@ print(secrets.get("project/cia/garbage/foo"))
 ### Using secrets locally (linux only)
 
 To test *locally* that your script can fetch secrets you will have to [download a binary](https://github.com/taskcluster/taskcluster/tree/master/clients/client-shell#readme)
-to set up your credentials. Unfortunately, this only works for Linux (filed [issue](https://github.com/armenzg/smart-scheduling/issues/1)).
+to set up your credentials. Unfortunately, this only works for Linux (filed [issue](https://github.com/mozilla/cia-tasks/issues/1)).
 
 On Mac OS X, you will need to right click the binary and Open it. That will except the binary from some security measures.
 
