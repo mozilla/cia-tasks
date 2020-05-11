@@ -136,6 +136,21 @@ secret = secrets.get("project/cia/garbage/foo")
 print(secret["secret"])
 ```
 
+#### Via script
+
+This WIP.
+
+On Mac OS X it might prompt to grant a Firewall permission.
+
+```shell
+cd utils
+# This will open a browser tab, sign in and save the generated client
+# Upon saving you can close the tab and return to the command line
+poetry run generate_client.py
+# TBD
+```
+
+
 ## How this is set up
 
 We set up a CI-A project in the Taskcluster Community set up (see [configuration](https://github.com/mozilla/community-tc-config/blob/master/config/projects/cia.yml)).
