@@ -56,18 +56,11 @@
       "retention": 10080,  // minutes = 7 days
       "serializer": "json",
       "stores": {
-        "file": {
-          "driver":"seeded-file",
-          "path": ".cache",
-          "url": "https://s3-us-west-2.amazonaws.com/communitytc-bugbug/data/adr_cache.tar.zst",
-          "archive_relpath": "data/adr_cache",
-          "reseed_interval": 10080
-
+        "s3": {
+          "driver": "s3",
+          "bucket": "communitytc-bugbug",
+          "prefix": "data/adr_cache/"
         }
-//        "file_cache": {
-//          "driver": "file",
-//          "path": ".cache"
-//        }
       }
     }
   },
