@@ -10,9 +10,6 @@
     "filename": "config.sqlite",
     "upgrade": false
   },
-  "taskcluster": {
-    "rootUrl": {"$ref": "env://TASKCLUSTER_PROXY_URL"}
-  },
   "destination": {
     "account_info": {
       "type": "service_account",

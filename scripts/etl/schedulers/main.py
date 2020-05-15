@@ -19,6 +19,7 @@ from mozci.push import make_push_objects
 
 import jx_sqlite
 import mo_math
+from cachy import CacheManager
 from jx_bigquery import bigquery
 from jx_python import jx
 from logs import capture_logging, capture_loguru
@@ -35,6 +36,7 @@ from mo_threads import Process
 from mo_threads.repeat import Repeat
 from mo_times import Date, Duration, Timer
 from pyLibrary.env import git
+from pyLibrary.meta import extend
 
 DEFAULT_START = "today-2day"
 LOOK_BACK = 30
@@ -233,14 +235,7 @@ def main():
         # https://loguru.readthedocs.io/en/stable/api/logger.html#loguru._logger.Logger.add
         capture_loguru()
 
-        # UPDATE ADR CONFIGURATION
-        with Repeat("waiting for ADR", every="10second"):
-            adr.config.update(config.adr)
-            # DUMMY TO TRIGGER CACHE
-            make_push_objects(
-                from_date=Date.today().format(), to_date=Date.now().format(), branch="autoland"
-            )
-
+        @extend(Configuration)
         def update(self, config):
             """
             Update the configuration object with new parameters
@@ -257,12 +252,23 @@ def main():
             # Use the NullStore by default. This allows us to control whether
             # caching is enabled or not at runtime.
             self._config["cache"].setdefault("stores", {"null": {"driver": "null"}})
-            object.__setattr__(self, "cache", CustomCacheManager(self._config["cache"]))
+            object.__setattr__(self, "cache", CustomCacheManager(self._config))
             for _, store in self._config["cache"]["stores"].items():
                 if store.path and not store.path.endswith("/"):
                     # REQUIRED, OTHERWISE FileStore._create_cache_directory() WILL LOOK AT PARENT DIRECTORY
                     store.path = store.path + "/"
-        setattr(Configuration, "update", update)
+
+        @extend(CacheManager)
+        def _create_s3_driver(self, config):
+            pass
+
+        # UPDATE ADR CONFIGURATION
+        with Repeat("waiting for ADR", every="10second"):
+            adr.config.update(config.adr)
+            # DUMMY TO TRIGGER CACHE
+            make_push_objects(
+                from_date=Date.today().format(), to_date=Date.now().format(), branch="autoland"
+            )
 
         Schedulers(config).process()
     except Exception as e:
