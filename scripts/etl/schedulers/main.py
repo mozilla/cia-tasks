@@ -236,6 +236,9 @@ def main():
         # https://loguru.readthedocs.io/en/stable/api/logger.html#loguru._logger.Logger.add
         capture_loguru()
 
+        if config.taskcluster:
+           inject_secrets(config)
+
         @extend(Configuration)
         def update(self, config):
             """
