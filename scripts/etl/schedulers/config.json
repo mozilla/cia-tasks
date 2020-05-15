@@ -56,11 +56,11 @@
       "retention": 10080,  // minutes = 7 days
       "serializer": "json",
       "stores": {
-        "s3": {
-          "driver": "s3",
-          "bucket": "communitytc-bugbug",
-          "prefix": "data/adr_cache/"
-        }
+//        "s3": {
+//          "driver": "s3",
+//          "bucket": "communitytc-bugbug",
+//          "prefix": "data/adr_cache/"
+//        }
       }
     }
   },
