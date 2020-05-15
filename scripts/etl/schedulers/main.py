@@ -9,15 +9,9 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-import os
-
 import adr
 import taskcluster
-from adr.configuration import Configuration
 from adr.errors import MissingDataError
-from adr.util.cache_stores import SeededFileStore
-from cachy import CacheManager
-from cachy.stores import NullStore
 from mozci.push import make_push_objects
 
 import jx_sqlite
@@ -236,36 +230,6 @@ def main():
         # https://loguru.readthedocs.io/en/stable/api/logger.html#loguru._logger.Logger.add
         capture_loguru()
 
-        # inject_secrets(config)
-
-        with Timer("Add update() method to Configuration class"):
-
-            def update(self, config):
-                """
-                Update the configuration object with new parameters
-                :param config: dict of configuration
-                """
-                for k, v in config.items():
-                    if v != None:
-                        self._config[k] = v
-
-                self._config["sources"] = sorted(
-                    map(os.path.expanduser, set(self._config["sources"]))
-                )
-
-                # Use the NullStore by default. This allows us to control whether
-                # caching is enabled or not at runtime.
-                self._config["cache"].setdefault("stores", {"null": {"driver": "null"}})
-                object.__setattr__(self, "cache", CacheManager(self._config["cache"]))
-                for _, store in self._config["cache"]["stores"].items():
-                    if store.path and not store.path.endswith("/"):
-                        # REQUIRED, OTHERWISE FileStore._create_cache_directory() WILL LOOK AT PARENT DIRECTORY
-                        store.path = store.path + "/"
-                self.cache.extend("seeded-file", SeededFileStore)
-                self.cache.extend("null", lambda _: NullStore())
-
-            setattr(Configuration, "update", update)
-
         # UPDATE ADR CONFIGURATION
         with Repeat("waiting for ADR", every="10second"):
             adr.config.update(config.adr)
@@ -283,4 +247,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

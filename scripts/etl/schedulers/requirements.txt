@@ -2,3 +2,4 @@ google-cloud-bigquery
 adr
 mozci
 taskcluster
+hjson
