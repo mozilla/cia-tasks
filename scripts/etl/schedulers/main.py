@@ -48,7 +48,6 @@ SECRET_NAMES = [
     "destination.account_info",
 ]
 
-
 def inject_secrets(config):
     """
     INJECT THE SECRETS INTO THE CONFIGURATION
@@ -63,7 +62,9 @@ def inject_secrets(config):
         secrets = taskcluster.Secrets(config.taskcluster)
         acc = Data()
         for s in listwrap(SECRET_NAMES):
-            acc[s] = secrets.get(concat_field(SECRET_PREFIX, s))["secret"]
+            secret_name = concat_field(SECRET_PREFIX, s)
+            Log.note("get secret named {{name|quote}}", name=secret_name)
+            acc[s] = secrets.get(secret_name)["secret"]
         set_default(config, acc)
 
 
