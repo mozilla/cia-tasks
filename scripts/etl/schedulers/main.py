@@ -9,8 +9,11 @@
 from __future__ import division
 from __future__ import unicode_literals
 
+import os
+
 import adr
 import taskcluster
+from adr.configuration import Configuration, CustomCacheManager
 from adr.errors import MissingDataError
 from mozci.push import make_push_objects
 
@@ -237,6 +240,29 @@ def main():
             make_push_objects(
                 from_date=Date.today().format(), to_date=Date.now().format(), branch="autoland"
             )
+
+        def update(self, config):
+            """
+            Update the configuration object with new parameters
+            :param config: dict of configuration
+            """
+            for k, v in config.items():
+                if v != None:
+                    self._config[k] = v
+
+            self._config["sources"] = sorted(
+                map(os.path.expanduser, set(self._config["sources"]))
+            )
+
+            # Use the NullStore by default. This allows us to control whether
+            # caching is enabled or not at runtime.
+            self._config["cache"].setdefault("stores", {"null": {"driver": "null"}})
+            object.__setattr__(self, "cache", CustomCacheManager(self._config["cache"]))
+            for _, store in self._config["cache"]["stores"].items():
+                if store.path and not store.path.endswith("/"):
+                    # REQUIRED, OTHERWISE FileStore._create_cache_directory() WILL LOOK AT PARENT DIRECTORY
+                    store.path = store.path + "/"
+        setattr(Configuration, "update", update)
 
         Schedulers(config).process()
     except Exception as e:
