@@ -101,8 +101,9 @@ class Schedulers:
 
     def get_state(self):
         try:
-            output = json2value(adr_configuration.config.cache.get(CACHY_STATE))
-            return output
+            state = json2value(adr_configuration.config.cache.get(CACHY_STATE))
+            Log.note("Got ETL state:\n{{state|json|indent}}", state=state)
+            return state
         except Exception:
             return None
 
