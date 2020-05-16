@@ -272,13 +272,15 @@ def main():
                     store.path = store.path + "/"
 
         if SHOW_S3_CACHE_HIT:
-            prev_get = S3Store._get
+            s3_get = S3Store._get
             @extend(S3Store)
             def _get(self, key):
-                output = prev_get(self, key)
-                if output is not None:
-                    Log.note("got {{key}} from S3", key=key)
-                return output
+                with Timer("get {{key}} from S3", {"key": key}, verbose=False) as timer:
+                    output = s3_get(self, key)
+                    if output is not None:
+                        timer.verbose = True
+                        Log.note("got {{key}} from S3", key=key)
+                    return output
 
         # UPDATE ADR CONFIGURATION
         with Repeat("waiting for ADR", every="10second"):
