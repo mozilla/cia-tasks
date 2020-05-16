@@ -2,6 +2,12 @@
 
 In this directory, we will have various scripts that we can schedule via Taskcluster.
 
+## Setup a Project
+
+All scripts must be setup under a project. We set up a [CI-A project in the Taskcluster Community](https://github.com/mozilla/community-tc-config/blob/master/config/projects/cia.yml).
+It's documentation is defined in [here](https://github.com/mozilla/community-tc-config/blob/master/config/projects/README.md).
+
+
 ## Requirements
 
 Requirements are specific to each script, hopefully there is `README.md` there to guide you
@@ -148,11 +154,6 @@ cd utils
 poetry run generate_client.py
 # TBD
 ```
-
-## How this is set up
-
-We set up a CI-A project in the Taskcluster Community set up (see [configuration](https://github.com/mozilla/community-tc-config/blob/master/config/projects/cia.yml)).
-It's documentation is defined in [here](https://github.com/mozilla/community-tc-config/blob/master/config/projects/README.md).
 
 ## Official documentation
 

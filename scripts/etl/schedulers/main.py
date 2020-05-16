@@ -13,13 +13,13 @@ import os
 
 import adr
 import taskcluster
+from adr import configuration as adr_configuration
 from adr.configuration import Configuration, CustomCacheManager
 from adr.errors import MissingDataError
+from cachy import CacheManager
 from mozci.push import make_push_objects
 
-import jx_sqlite
 import mo_math
-from cachy import CacheManager
 from jx_bigquery import bigquery
 from jx_python import jx
 from logs import capture_logging, capture_loguru
@@ -31,17 +31,19 @@ from mo_dots import (
     concat_field,
     set_default,
 )
+from mo_json import value2json, json2value
 from mo_logs import startup, constants, Log
 from mo_threads import Process
 from mo_threads.repeat import Repeat
-from mo_times import Date, Duration, Timer
+from mo_times import Date, Duration, Timer, MINUTE
 from pyLibrary.env import git
 from pyLibrary.meta import extend
 
 DEFAULT_START = "today-2day"
 LOOK_BACK = 30
 LOOK_FORWARD = 30
-
+CACHY_STATE = "cia-tasks/etl/schedules"
+CACHY_RETENTION = Duration("30day") / MINUTE
 
 SECRET_PREFIX = "project/cia/smart-scheduling"
 SECRET_NAMES = [
@@ -82,12 +84,8 @@ class Schedulers:
 
         # CALCULATE THE PREVIOUS RUN
         mozci_version = self.version("mozci")
-        self.etl_config_table = jx_sqlite.Container(
-            config.config_db
-        ).get_or_create_facts("etl-range")
-        done_result = wrap(self.etl_config_table.query()).data
-        prev_done = done_result[0]
-        if len(done_result) and prev_done.mozci_version == mozci_version:
+        prev_done = self.get_state()
+        if prev_done and prev_done.mozci_version == mozci_version:
             self.done = Data(
                 mozci_version=mozci_version,
                 min=Date(coalesce(prev_done.min, config.start, "today-2day")),
@@ -99,7 +97,17 @@ class Schedulers:
                 min=Date(coalesce(config.start, "today-2day")),
                 max=Date(coalesce(config.start, "today-2day")),
             )
-            self.etl_config_table.add(self.done)
+            self.set_state()
+
+    def get_state(self):
+        try:
+            output = json2value(adr_configuration.config.cache.get(CACHY_STATE))
+            return output
+        except Exception:
+            return None
+
+    def set_state(self):
+        adr_configuration.config.cache.put(CACHY_STATE, value2json(self.done), minutes=CACHY_RETENTION)
 
     def version(self, package):
         with Process("", ["pip", "show", package]) as p:
@@ -113,7 +121,7 @@ class Schedulers:
         # UPDATE THE DATABASE STATE
         self.done.min = mo_math.min(end, self.done.min)
         self.done.max = mo_math.max(start, self.done.max)
-        self.etl_config_table.update({"set": self.done})
+        self.set_state()
 
         try:
             pushes = make_push_objects(

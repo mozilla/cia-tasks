@@ -6,10 +6,6 @@
     "max": "today-1day"
   },
   "branches": "autoland",
-  "config_db": {
-    "filename": "config.sqlite",
-    "upgrade": false
-  },
   "destination": {
     "account_info": {
       "$ref": "file:///e:/moz-fx-dev-ekyle-treeherder-a838a7718652.json"
