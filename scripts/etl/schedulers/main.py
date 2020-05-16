@@ -16,7 +16,7 @@ import taskcluster
 from adr import configuration as adr_configuration
 from adr.configuration import Configuration, CustomCacheManager
 from adr.errors import MissingDataError
-from cachy import CacheManager
+from adr.util.cache_stores import S3Store
 from mozci.push import make_push_objects
 
 import mo_math
@@ -44,7 +44,7 @@ LOOK_BACK = 30
 LOOK_FORWARD = 30
 CACHY_STATE = "cia-tasks/etl/schedules"
 CACHY_RETENTION = Duration("30day") / MINUTE
-
+SHOW_S3_CACHE_HIT = True
 SECRET_PREFIX = "project/cia/smart-scheduling"
 SECRET_NAMES = [
     "destination.account_info",
@@ -271,9 +271,14 @@ def main():
                     # REQUIRED, OTHERWISE FileStore._create_cache_directory() WILL LOOK AT PARENT DIRECTORY
                     store.path = store.path + "/"
 
-        @extend(CacheManager)
-        def _create_s3_driver(self, config):
-            pass
+        if SHOW_S3_CACHE_HIT:
+            prev_get = S3Store._get
+            @extend(S3Store)
+            def _get(self, key):
+                output = prev_get(self, key)
+                if output is not None:
+                    Log.note("got {{key}} from S3", key=key)
+                return output
 
         # UPDATE ADR CONFIGURATION
         with Repeat("waiting for ADR", every="10second"):
