@@ -279,7 +279,6 @@ def main():
                     output = s3_get(self, key)
                     if output is not None:
                         timer.verbose = True
-                        Log.note("got {{key}} from S3", key=key)
                     return output
 
         # UPDATE ADR CONFIGURATION
