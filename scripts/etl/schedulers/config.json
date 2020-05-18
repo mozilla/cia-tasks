@@ -53,8 +53,8 @@
     "verbose": 0,
     "url": "https://activedata.allizom.org/query",
     "cache": {
-      "retention": 10080,  // minutes = 7 days
-      "serializer": "pickle",
+      "retention": 40320,  // minutes = 7 days
+      "serializer": "compressedpickle",
       "stores": {
         "s3": {
           "driver": "s3",
