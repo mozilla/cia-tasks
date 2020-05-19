@@ -23,7 +23,7 @@ from mo_logs import Except
 KWARGS = str("kwargs")
 
 
-def override(kwargs=KWARGS):
+def override(kwargs=None):
     """
     THIS DECORATOR WILL PUT ALL PARAMETERS INTO THE `kwargs` PARAMETER AND
     THEN PUT ALL `kwargs` PARAMETERS INTO THE FUNCTION PARAMETERS. THIS HAS
@@ -160,8 +160,9 @@ def override(kwargs=KWARGS):
             )
 
     if is_text(kwargs):
-        # SIMPLE VERSION @override
+        # COMPLEX VERSION @override(kwargs="other")
         return output
     else:
-        # COMPLEX VERSION @override(kwargs="other")
-        return output(func=kwargs)
+        # SIMPLE VERSION @override
+        func, kwargs = kwargs, KWARGS
+        return output(func)
