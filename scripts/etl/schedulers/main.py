@@ -33,12 +33,13 @@ from mo_dots import (
 )
 from mo_json import value2json, json2value
 from mo_logs import startup, constants, Log
-from mo_threads import Process
+from mo_threads import Process, Till
 from mo_threads.repeat import Repeat
 from mo_times import Date, Duration, Timer, MINUTE
 from pyLibrary.env import git
 from pyLibrary.meta import extend
 
+MAX_RUNTIME = "50minute"  # STOP PROCESSING AFTER THIS GIVEN TIME
 DEFAULT_START = "today-2day"
 LOOK_BACK = 30
 LOOK_FORWARD = 30
@@ -117,7 +118,7 @@ class Schedulers:
                     return line[9:].strip()
             return None
 
-    def process_one(self, start, end, branch):
+    def process_one(self, start, end, branch, please_stop):
         # ASSUME PREVIOUS WORK IS DONE
         # UPDATE THE DATABASE STATE
         self.done.min = mo_math.min(end, self.done.min)
@@ -144,6 +145,9 @@ class Schedulers:
         data = []
         try:
             for push in pushes:
+                if please_stop:
+                    break
+
                 with Timer("get tasks for push {{push}}", {"push": push.id}):
                     try:
                         schedulers = [
@@ -201,7 +205,7 @@ class Schedulers:
             with Timer("adding {{num}} records to bigquery", {"num": len(data)}):
                 self.destination.extend(data)
 
-    def process(self):
+    def process(self, please_stop):
         done = self.done
         config = self.config
 
@@ -226,7 +230,9 @@ class Schedulers:
 
         try:
             for start, end, branch in self.todo:
-                self.process_one(start, end, branch)
+                if please_stop:
+                    break
+                self.process_one(start, end, branch, please_stop)
         except Exception as e:
             Log.warning("Could not complete the etl", cause=e)
         else:
@@ -289,7 +295,7 @@ def main():
                 from_date=Date.today().format(), to_date=Date.now().format(), branch="autoland"
             )
 
-        Schedulers(config).process()
+        Schedulers(config).process(Till(seconds=Duration(MAX_RUNTIME).total_seconds()))
     except Exception as e:
         Log.warning("Problem with etl! Shutting down.", cause=e)
     finally:
