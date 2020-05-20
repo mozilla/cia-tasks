@@ -295,7 +295,9 @@ def main():
                 from_date=Date.today().format(), to_date=Date.now().format(), branch="autoland"
             )
 
-        Schedulers(config).process(Till(seconds=Duration(MAX_RUNTIME).total_seconds()))
+        outatime = Till(seconds=Duration(MAX_RUNTIME).total_seconds())
+        outatime.then(lambda: Log.alert("Out of time, exit early"))
+        Schedulers(config).process(outatime)
     except Exception as e:
         Log.warning("Problem with etl! Shutting down.", cause=e)
     finally:
