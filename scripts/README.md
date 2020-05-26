@@ -2,41 +2,124 @@
 
 In this directory, we will have various scripts that we can schedule via Taskcluster.
 
+## Setup a Project
+
+All scripts must be setup under a project. We set up a [CI-A project in the Taskcluster Community](https://github.com/mozilla/community-tc-config/blob/master/config/projects/cia.yml).
+It's documentation is defined in [here](https://github.com/mozilla/community-tc-config/blob/master/config/projects/README.md).
+
+
 ## Requirements
 
-Python and pip
+Requirements are specific to each script, hopefully there is `README.md` there to guide you
 
-## How to get started
+## Making a new script
 
 Create a new directory and place your desired script in there.
 You can define your own requirements file as well.
 
-## How to schedule a task
-
-For now, we will have to create a hook per script and we will have to create it by hand.
-You can see [this hook](https://community-tc.services.mozilla.com/hooks/project-cia/hello-world) as
-a simple example. It checks out this repo, set ups the virtualenv and executes the script.
-
-Copy the contents of that hook and create a new hook. Only modify the `command` entry to meet your needs.
-Adjust the `cron` schedule in the UI.
-
-Note that you can manually trigger a hook (without waiting for its schedule) and that will schedule a task
-executing the contents of the hook.
-
-In the future, if we decide that we want to improve this system we can define our hooks in this repo and
-get them deployed automatically rather manually defining them (filed [issue](https://github.com/mozilla/cia-tasks/issues/5)).
-
-## Using secrets
+## Adding secrets
 
 In Taskcluster we can store [secrets](https://community-tc.services.mozilla.com/secrets).
 If you belong to the [CI-A Github team](https://github.com/orgs/mozilla/teams/cia/members) team you can create and fetch secrets.
-Open [this secret](https://community-tc.services.mozilla.com/secrets/project%2Fcia%2Fgarbage%2Ffoo) and try to see it. If you can see the
-secret you can then create your own.
+Open [this secret](https://community-tc.services.mozilla.com/secrets/project%2Fcia%2Fgarbage%2Ffoo) and try to see it. 
 
-### Retrieving secrets locally
+> You should make a test secret to ensure you have the permissions to do so
+
+## Using secrets locally 
+
+There is some documentation about [setup of a taskcluster client](https://github.com/taskcluster/taskcluster/tree/master/clients/client-py#setup).  The specifics are below
+
+#### Login
+
+You must have a github account to login to the community cluster
+
+    https://community-tc.services.mozilla.com
+
+#### Make a client
+
+To get secrets, your script will require a client id and a corresponding access token. Start the process here: [Create client](https://community-tc.services.mozilla.com/auth/clients/create?scope=)
+
+Fill in the parameters:
+
+* **Client ID** - whatever you like, but must be prefixed with your user id. Example: `github/2334429|klahnakoski/test-id2`
+* **Expires** - set up to 30 days (*default 5 minutes*)
+* **Scope** - `secrets:get:project/cia/*`
+   
+When you save, you will get an access token. *Ensure you record the `accessToken`, you will not see it again*
+
+#### Credentials
+
+With the three parameters known you can get the secrets
+
+```python
+import taskcluster
+options = {
+    "rootUrl": "https://community-tc.services.mozilla.com",
+    "credentials": {
+        "clientId": "github/2334429|klahnakoski/test-id",
+        "accessToken": "nOtalEgItImAtEbAsE64aCCeStOkEnTWWxdUxbvtiI7Q"
+    },
+}
+print(taskcluster.Secrets(options))
+```
+
+#### Using environment variables
+
+Alternatively, `optionsFromEnvironment()` can pull parameters from environment variables. Set the variables:
+
+    set TASKCLUSTER_ROOT_URL=https://community-tc.services.mozilla.com
+    set TASKCLUSTER_CLIENT_ID=github/2334429|klahnakoski/test-id;
+    set TASKCLUSTER_ACCESS_TOKEN=nOtalEgItImAtEbAsE64aCCeStOkEnTWWxdUxbvtiI7Q
+
+> Full list of [taskcluster environment variables](https://docs.taskcluster.net/docs/manual/design/env-vars) 
+
+and use them 
+
+```python
+import taskcluster
+options = taskcluster.optionsFromEnvironment()
+secrets = taskcluster.Secrets(options)
+print(secrets.get("project/cia/garbage/foo"))
+```
+
+## Using secrets on Taskcluster
+
+#### Create Role
+
+You must [create a Role](https://community-tc.services.mozilla.com/auth/roles/create) for the hook; then you will give it the scopes needed to access the secrets
+
+* **Role ID** - Some name, starting with `hook-id:` and followed by some reasonable path for your team and project. Example: `hook-id:project-cia/etl-schedulers`
+* **Scopes** List of scopes the role has. Be sure to include the secret name.  Example: `secrets:get:project/cia/smart-scheduling*`
+
+#### Create Hook
+
+Hooks are used to trigger tasks, and you must [create a hook](https://community-tc.services.mozilla.com/hooks/create). There are a number of options, and you can look over other existing hooks. [Hello World example](https://community-tc.services.mozilla.com/hooks/project-cia/hello-world)
+
+* cron
+* command 
+
+In the task template, be sure to `assume:` the Role ID.   
+
+    scopes:
+      - 'assume:hook-id:project-cia/etl-schedulers
+
+#### Credentials
+
+Taskcluster will provide `TASKCLUSTER_PROXY_URL` environment variable to running tasks. This value can be used as the `rootUrl`, and without credentials.  
+
+```python
+import taskcluster
+secrets = taskcluster.Secrets({'rootUrl': os.environ['TASKCLUSTER_PROXY_URL']})
+print(secrets.get("project/cia/garbage/foo"))
+```
+
+> **WARNING** The Taskcluster client code attempts to detect the running environment; if it detects it NOT running in taskcluster, it will not accept `TASKCLUSTER_PROXY_URL` environment variable, and things break. 
+
+
+### Using secrets locally (linux only)
 
 To test *locally* that your script can fetch secrets you will have to [download a binary](https://github.com/taskcluster/taskcluster/tree/master/clients/client-shell#readme)
-to set up your credentials. Unfortunately, this only works for Linux and Windows (filed [issue](https://github.com/mozilla/cia-tasks/issues/7)).
+to set up your credentials. Unfortunately, this only works for Linux (filed [issue](https://github.com/mozilla/cia-tasks/issues/1)).
 
 On Mac OS X, you will need to right click the binary and Open it. That will except the binary from some security measures.
 
@@ -58,10 +141,19 @@ secret = secrets.get("project/cia/garbage/foo")
 print(secret["secret"])
 ```
 
-## How this is set up
+#### Via script
 
-We set up a CI-A project in the Taskcluster Community set up (see [configuration](https://github.com/mozilla/community-tc-config/blob/master/config/projects/cia.yml)).
-It's documentation is defined in [here](https://github.com/mozilla/community-tc-config/blob/master/config/projects/README.md).
+This WIP.
+
+On Mac OS X it might prompt to grant a Firewall permission.
+
+```shell
+cd utils
+# This will open a browser tab, sign in and save the generated client
+# Upon saving you can close the tab and return to the command line
+poetry run generate_client.py
+# TBD
+```
 
 ## Official documentation
 

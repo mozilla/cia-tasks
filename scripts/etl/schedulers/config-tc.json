@@ -1,0 +1,72 @@
+{
+  "start": "today-2day",
+  "interval": "6hour",
+  "range": {
+    "min": "today-3week",
+    "max": "today-1day"
+  },
+  "branches": "autoland",
+  "config_db": {
+    "filename": "config.sqlite",
+    "upgrade": false
+  },
+  "destination": {
+    "account_info": {
+      "type": "service_account",
+      "project_id": "moz-fx-dev-ekyle-treeherder",
+      "client_email": "test-treeherder-extract@moz-fx-dev-ekyle-treeherder.iam.gserviceaccount.com",
+      "client_id": "116659350535089980029",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/test-treeherder-extract%40moz-fx-dev-ekyle-treeherder.iam.gserviceaccount.com",
+    },
+    "dataset": "dev-scheduling",
+    "table": "schedulers",
+    "schema": {
+      "push.id._i_": "integer",
+      "push.date._t_": "time",
+      "etl.timestamp._t_": "time"
+    },
+    "top_level_fields": {
+      "push.id": "_push_id",
+      "push.date": "_push_date",
+      "etl.timestamp": "_etl_timestamp"
+    },
+    "partition": {
+      "field": "push.date",
+      "expire": "2year"
+    },
+    "id": {
+      "field": "push.id",
+      "version": "etl.timestamp"
+    },
+    "cluster": [
+      "push.id"
+    ],
+    "sharded": true
+  },
+  "adr": {
+    "verbose": 0,
+    "url": "https://activedata.allizom.org/query",
+    "cache": {
+      "retention": 10080,  // minutes = 7 days
+      "serializer": "pickle",
+      "stores": {
+        "s3": {
+          "driver": "s3",
+          "bucket": "communitytc-bugbug",
+          "prefix": "data/adr_cache/"
+        }
+      }
+    }
+  },
+  "constants": {
+    "jx_bigquery.bigquery.DEBUG": true,
+    "mozci.util.req.DEFAULT_RETRIES": 5,
+    "mozci.util.req.DEFAULT_BACKOFF_FACTOR": 5
+  },
+  "debug": {
+    "trace": true
+  }
+}
