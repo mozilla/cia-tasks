@@ -11,13 +11,15 @@ from __future__ import absolute_import, division, unicode_literals
 
 from uuid import uuid4
 
+from mo_json.typed_encoder import EXISTS_TYPE
+
 from jx_base.expressions import jx_expression
 from jx_python.expressions import Literal, Python
-from mo_dots import coalesce, listwrap, wrap
+from mo_dots import coalesce, listwrap, to_data
 from mo_dots.datas import register_data
 from mo_dots.lists import last
 from mo_future import is_text, text
-from mo_json import value2json, true, false, null
+from mo_json import value2json, true, false, null, EXISTS, OBJECT, NESTED
 from mo_logs import Log
 from mo_logs.strings import expand_template, quote
 
@@ -77,7 +79,7 @@ def DataClass(name, columns, constraint=None):
     :return: The class that has been created
     """
 
-    columns = wrap(
+    columns = to_data(
         [
             {"name": c, "required": True, "nulls": False, "type": object}
             if is_text(c)
@@ -86,10 +88,10 @@ def DataClass(name, columns, constraint=None):
         ]
     )
     slots = columns.name
-    required = wrap(
+    required = to_data(
         filter(lambda c: c.required and not c.nulls and not c.default, columns)
     ).name
-    nulls = wrap(filter(lambda c: c.nulls, columns)).name
+    nulls = to_data(filter(lambda c: c.nulls, columns)).name
     defaults = {c.name: coalesce(c.default, None) for c in columns}
     types = {c.name: coalesce(c.jx_type, object) for c in columns}
 
@@ -115,8 +117,7 @@ class {{class_name}}(Mapping):
             "constraint\\n{" + "{code}}\\nnot satisfied {" + "{expect}}\\n{" + "{value|indent}}",
             code={{constraint_expr|quote}}, 
             expect={{constraint}}, 
-            value=row,
-            cause=e
+            value=row
         )
 
     def __init__(self, **kwargs):
@@ -217,6 +218,7 @@ TableDesc = DataClass(
 )
 
 
+from jx_base.container import Container
 Column = DataClass(
     "Column",
     [
@@ -235,13 +237,38 @@ Column = DataClass(
     ],
     constraint={
         "and": [
+            {
+                "when": {"ne":{"name":"."}},
+                "then": {"ne": ["name", {"first": "nested_path"}]},
+                "else": True
+            },
             {"not": {"find": {"es_column": "null"}}},
             {"not": {"eq": {"es_column": "string"}}},
             {"not": {"eq": {"es_type": "object", "jx_type": "exists"}}},
+            {
+                "when": {"suffix": {"es_column": "." + EXISTS_TYPE}},
+                "then": {"eq": {"jx_type": EXISTS}},
+                "else": True
+            },
+            {
+                "when": {"suffix": {"es_column": "." + EXISTS_TYPE}},
+                "then": {"exists": "cardinality"},
+                "else": True
+            },
+            {
+                "when": {"eq": {"jx_type": OBJECT}},
+                "then": {"in": {"cardinality": [0, 1]}},
+                "else": True
+            },
+            {
+                "when": {"eq": {"jx_type": NESTED}},
+                "then": {"in": {"cardinality": [0, 1]}},
+                "else": True
+            },
             {"eq": [{"last": "nested_path"}, {"literal": "."}]},
             {
                 "when": {"eq": [{"literal": ".~N~"}, {"right": {"es_column": 4}}]},
-                "then": {"gt": {"multi": 1}},
+                "then": {"and": [{"gt": {"multi": 1}}, {"eq": {"jx_type": "nested"}}, {"eq": {"es_type": "nested"}}]},
                 "else": True,
             },
             {
@@ -252,7 +279,6 @@ Column = DataClass(
         ]
     },
 )
-from jx_base.container import Container
 from jx_base.namespace import Namespace
 from jx_base.facts import Facts
 from jx_base.snowflake import Snowflake

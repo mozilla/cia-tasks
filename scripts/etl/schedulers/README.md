@@ -1,6 +1,6 @@
-# Schedulers ETL
+# Smart Scheduling ETL
 
-Schedule some jobs to run and fill BigQuery
+Schedule some jobs that use MozCI to pull shadow scheduler information, and push to BigQuery 
 
 
 ## Coding
@@ -13,7 +13,7 @@ Install into virtual machine using the directory of this README as current direc
     python -m virtualenv .venv             
     .venv\Scripts\activate
     
-the moxci has some conflicting requirements, they can be sorted with `pip-tools`    
+the mozci has some conflicting requirements, they can be sorted with `pip-tools`    
     
     pip3 install pip-tools
     pip-compile --upgrade --generate-hashes --output-file requirements.txt requirements.in

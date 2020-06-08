@@ -39,7 +39,7 @@ from mo_times import Date
 ALLOW_SCRIPTING = False
 EMPTY_DICT = {}
 
-Literal, TRUE, NULL, TupleOp, Variable = [None] * 5
+Literal, TRUE, NULL, TupleOp, Variable = [Null] * 5  # IMPORTS
 
 def extend(cls):
     """
@@ -111,7 +111,7 @@ def _jx_expression(expr, lang):
     elif is_sequence(expr):
         return lang[TupleOp([_jx_expression(e, lang) for e in expr])]
 
-    # expr = wrap(expr)
+    # expr = to_data(expr)
     try:
         items = items_(expr)
 

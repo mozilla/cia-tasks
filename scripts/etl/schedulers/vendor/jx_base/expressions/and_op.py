@@ -25,15 +25,16 @@ from jx_base.expressions.expression import Expression
 from jx_base.expressions.false_op import FALSE
 from jx_base.expressions.true_op import TRUE
 from jx_base.language import is_op
-from mo_dots import is_many
+from mo_dots import is_many, Null
 from mo_future import zip_longest
 from mo_json import BOOLEAN
 
-NotOp = None
-OrOp = None
+NotOp, OrOp = [Null] * 2
+
 
 class AndOp(Expression):
     data_type = BOOLEAN
+    zero = TRUE  # ADD THIS TO terms FOR NO EEFECT
 
     def __init__(self, terms):
         Expression.__init__(self, terms)
@@ -72,13 +73,19 @@ class AndOp(Expression):
             if simple.type != BOOLEAN:
                 simple = simple.exists()
 
-            if simple is self.lang[TRUE]:
+            if simple is TRUE:
                 continue
             elif simple is FALSE:
                 return FALSE
             elif is_op(simple, AndOp):
                 for and_terms in or_terms:
-                    and_terms.extend([tt for tt in simple.terms if tt not in and_terms])
+                    for tt in simple.terms:
+                        if tt in and_terms:
+                            continue
+                        if self.lang[NotOp(tt)].partial_eval() in and_terms:
+                            or_terms.remove(and_terms)
+                            break
+                        and_terms.append(tt)
                 continue
             elif is_op(simple, OrOp):
                 or_terms = [

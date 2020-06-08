@@ -31,6 +31,7 @@ from mo_json import BOOLEAN
 
 class OrOp(Expression):
     data_type = BOOLEAN
+    zero = FALSE  # ADD THIS TO terms FOR NO EEFECT
 
     def __init__(self, terms):
         Expression.__init__(self, terms)
@@ -73,7 +74,7 @@ class OrOp(Expression):
             if simple is TRUE:
                 return TRUE
             elif simple is FALSE:
-                pass
+                continue
             elif is_op(simple, OrOp):
                 terms.extend([tt for tt in simple.terms if tt not in terms])
             elif is_op(simple, AndOp):

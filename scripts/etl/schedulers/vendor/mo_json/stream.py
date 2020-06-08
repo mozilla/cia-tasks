@@ -21,7 +21,7 @@ from mo_dots import (
     split_field,
     startswith_field,
     wrap,
-)
+    to_data)
 from mo_future import NEXT
 from mo_logs import Log
 
@@ -315,7 +315,7 @@ class Parser(object):
             self.json.mark(index - 1)
             index = self.jump_to_end(index, c)
             temp = self.json.release(index).decode("utf8")
-            value = wrap(json_decoder(temp))
+            value = to_data(json_decoder(temp))
             return value, index
         elif c == b"t" and self.json.slice(index, index + 3) == b"rue":
             return True, index + 3
