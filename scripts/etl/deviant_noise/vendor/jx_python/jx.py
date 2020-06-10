@@ -1082,6 +1082,7 @@ def reverse(vals):
     # TODO: Test how to do this fastest
     if not hasattr(vals, "len"):
         vals = list(vals)
+
     l = len(vals)
     output = [None] * l
 

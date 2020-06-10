@@ -1,26 +1,23 @@
 from mo_dots import listwrap
 from mo_future import text
 from mo_logs.strings import expand_template
-from jx_mysql.mysql import MySQL, quote_list
+from jx_bigquery.sql import quote_list
 
 
-def get_all_signatures(db_config, sql):
+def get_all_signatures(db, sql):
     """
     RETURN ALL SIGNATURES FROM PERFHERDER DATABASE
     """
-    db = MySQL(db_config)
     with db:
         return db.query(text(sql))
 
 
-def get_signature(db_config, signature_id):
-    db = MySQL(db_config)
+def get_signature(db, signature_id):
     with db:
         return db.query(expand_template(signature_sql, quote_list(listwrap(signature_id))))
 
 
-def get_dataum(db_config, signature_id):
-    db = MySQL(db_config)
+def get_dataum(db, signature_id):
     with db:
         return db.query(expand_template(datum_sql, quote_list(listwrap(signature_id))))
 
@@ -90,7 +87,7 @@ datum_sql = """
             a.`is_regression` AS `alert.isregression`,
             a.`status` AS `alert.status`,
             a.`amount_pct` AS `alert.amount_pct`,
-            a.`amount_abs` AS `alert.anount_abs`,
+            a.`amount_abs` AS `alert.amount_abs`,
             a.`prev_value` AS `alert.prev_value`,
             a.`new_value` AS `alert.new_value`,
             a.`t_value` AS `alert.t_value`,

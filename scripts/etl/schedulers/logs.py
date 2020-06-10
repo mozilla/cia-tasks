@@ -27,7 +27,7 @@ def capture_loguru():
     """
     loguru.logger.remove()
     loguru.logger.add(
-        _loguru_emit, level="DEBUG", format="{message}", filter=lambda r: True,
+        _loguru_emit, level="NOTSET", format="{message}", filter=lambda r: True,
     )
 
 

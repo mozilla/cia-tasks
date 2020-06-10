@@ -1,0 +1,51 @@
+{
+  "source": {
+    "account_info": {
+      "$ref": "file:///e:/moz-fx-dev-ekyle-treeherder-a838a7718652.json"
+    },
+//    "account_info": {"$ref": "#destination.account_info"},
+    "dataset": "treeherder-prod",
+    "table": "perf"
+  },
+  "destination": {
+    "account_info": {
+      "type": "service_account",
+      "project_id": "moz-fx-dev-ekyle-treeherder",
+      "client_email": "test-treeherder-extract@moz-fx-dev-ekyle-treeherder.iam.gserviceaccount.com",
+      "client_id": "116659350535089980029",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/test-treeherder-extract%40moz-fx-dev-ekyle-treeherder.iam.gserviceaccount.com",
+    },
+    "dataset": "dev-deviant",
+    "table": "noise",
+    "schema": {
+      "push.id._i_": "integer",
+      "push.date._t_": "time",
+      "etl.timestamp._t_": "time"
+    },
+    "top_level_fields": {
+      "id": "id",
+      "last_updated": "last_updated"
+    },
+    "partition": {
+      "field": "last_updated",
+      "expire": "1year"
+    },
+    "id": {
+      "field": "id",
+      "version": "last_updated"
+    },
+    "cluster": [
+      "id"
+    ],
+    "sharded": true
+  },
+  "constants": {
+    "jx_bigquery.bigquery.DEBUG": true
+  },
+  "debug": {
+    "trace": true
+  }
+}

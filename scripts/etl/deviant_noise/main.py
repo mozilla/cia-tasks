@@ -9,27 +9,30 @@
 from __future__ import division
 from __future__ import unicode_literals
 
+import numpy as np
 import taskcluster
 
-from logs import capture_logging, capture_loguru
+from jx_bigquery import bigquery
+from jx_python import jx
+from measure_noise import deviance
+from measure_noise.analysis import IGNORE_TOP
+from measure_noise.extract_perf import get_dataum, get_signature
+from measure_noise.step_detector import MAX_POINTS, find_segments
 from mo_dots import (
     Data,
     listwrap,
     concat_field,
     set_default,
-)
-from mo_logs import startup, constants, Log
-from mo_threads import Till
-from mo_times import Duration, Timer, MINUTE
+    coalesce, to_data, dict_to_data)
+from mo_future import text
+from mo_logs import Log
+from mo_logs.strings import left
+from mo_sql import SQL
+from mo_threads import Till, Queue, Thread
+from mo_times import Duration, Timer, Date, YEAR, MONTH
 
 MAX_RUNTIME = "50minute"  # STOP PROCESSING AFTER THIS GIVEN TIME
-DEFAULT_START = "today-2day"
-LOOK_BACK = 30
-LOOK_FORWARD = 30
-CACHY_STATE = "cia-tasks/etl/schedules"
-CACHY_RETENTION = Duration("30day") / MINUTE
-SHOW_S3_CACHE_HIT = True
-SECRET_PREFIX = "project/cia/smart-scheduling"
+SECRET_PREFIX = "project/cia/deviant-noise"
 SECRET_NAMES = [
     "destination.account_info",
 ]
@@ -55,31 +58,159 @@ def inject_secrets(config):
         set_default(config, acc)
 
 
-def main():
-    with Log.start(app_name="etl") as context:
-        config = context.config
-        outatime = Till(seconds=Duration(MAX_RUNTIME).total_seconds())
-        outatime.then(lambda: Log.alert("Out of time, exit early"))
+def process(
+    sig_id,
+    source_db,
+    show=False,
+    show_limit=MAX_POINTS,
+    show_old=True,
+    show_distribution=None
+):
+    sig = get_signature(source_db, sig_id)
+    data = get_dataum(source_db, sig_id)
 
-        # PULL SOME SERIES
+    min_date = (Date.today() - 3 * MONTH).unix
+    pushes = jx.sort(
+        [
+            {
+                "value": np.median(rows.value),
+                "runs": rows,
+                "push": {"time": to_data(t).push.time},
+            }
+            for t, rows in jx.groupby(data, "push.time")
+            if t["push\\.time"] > min_date
+        ],
+        "push.time",
+    )
 
-        def update_local_database():
-    # GET EVERYTHING WE HAVE SO FAR
-    exists = summary_table.query(
-        {
-            "select": ["id", "last_updated"],
-            "where": {"and": [{"in": {"id": candidates.id}}, {"exists": "num_pushes"}]},
-            "sort": "last_updated",
-            "limit": 100000,
-            "format": "list",
-        }
-    ).data
-    # CHOOSE MISSING, THEN OLDEST, UP TO "RECENT"
-    missing = list(set(candidates.id) - set(exists.id))
+    values = pushes.value
+    title = "-".join(
+        map(
+            text,
+            [
+                sig.id,
+                sig.framework,
+                sig.suite,
+                sig.test,
+                sig.platform,
+                sig.repository.name,
+            ],
+        )
+    )
+    Log.note("With {{title}}", title=title)
 
-    too_old = Date.today() - parse(LOCAL_RETENTION)
-    needs_update = missing + [e.id for e in exists if e.last_updated < too_old.unix]
-    Log.alert("{{num}} series are candidates for local update", num=len(needs_update))
+    with Timer("find segments"):
+        new_segments, new_diffs = find_segments(
+            values, sig.alert_change_type, sig.alert_threshold
+        )
+
+    if len(new_segments) == 1:
+        overall_dev_status = None
+        overall_dev_score = None
+        last_dev_status = None
+        last_dev_score = None
+        relative_noise = None
+    else:
+        # NOISE OF LAST SEGMENT
+        s, e = new_segments[-2], new_segments[-1]
+        last_segment = np.array(values[s:e])
+        trimmed_segment = last_segment[np.argsort(last_segment)[IGNORE_TOP:-IGNORE_TOP]]
+        last_mean = np.mean(trimmed_segment)
+        last_std = np.std(trimmed_segment)
+        last_dev_status, last_dev_score = deviance(trimmed_segment)
+        relative_noise = last_std / last_mean
+
+        # FOR EACH SEGMENT, NORMALIZE MEAN AND VARIANCE
+        normalized = []
+        for s, e in jx.pairs(new_segments):
+            data = np.array(values[s:e])
+            norm = (data + last_mean - np.mean(data)) * last_std / np.std(data)
+            normalized.extend(norm)
+
+        trimmed_segment = normalized[np.argsort(normalized)[IGNORE_TOP:-IGNORE_TOP]]
+        overall_dev_status, overall_dev_score = deviance(trimmed_segment)
+        Log.note(
+            "\n\tdeviance = {{deviance}}\n\tnoise={{std}}",
+            title=title,
+            deviance=(overall_dev_status, overall_dev_score),
+            std=relative_noise,
+        )
+
+    summary_table.upsert(
+        where={"eq": {"id": sig.id}},
+        doc=Data(
+            id=sig.id,
+            title=title,
+            num_pushes=len(pushes),
+            num_segments=len(new_segments),
+            relative_noise=relative_noise,
+            overall_dev_status=overall_dev_status,
+            overall_dev_score=overall_dev_score,
+            last_mean=last_mean,
+            last_std=last_std,
+            last_dev_status=last_dev_status,
+            last_dev_score=last_dev_score,
+            last_updated=Date.now(),
+            values=values,
+        ),
+    )
+
+
+def main(config):
+    outatime = Till(seconds=Duration(MAX_RUNTIME).total_seconds())
+    outatime.then(lambda: Log.alert("Out of time, exit early"))
+
+    # GET SOURCE
+    source = bigquery.Dataset(config.destination).get_or_create_table(config.source)
+    # GET ALL KNOWN SERIES
+    min_time = (Date.now() - YEAR).unix
+    all_series = dict_to_data({
+        id: {"id": id, "last_updated": last_updated}
+        for id, last_updated in source.query(SQL(f"""
+            SELECT 
+                job.signature.signature.__s__ as id, 
+                max(push.time.__t__) as last_updated
+            FROM 
+                treeherder_2d_prod.perf
+            WHERE
+                push.time.__t__ > {min_time}
+            GROUP BY  
+                job.signature.signature.__s__
+            ORDER BY
+                last_updated
+            LIMIT 
+                5000
+        """)).data
+    })
+
+    # SETUP DESTINATION
+    destination = bigquery.Dataset(config.destination).get_or_create_table(config.destination)
+
+    # PULL PREVIOUS SERIES
+    previous = dict_to_data({
+        id: {"id": id, "last_processed": last_processed}
+        for id, last_processed in destination.query(SQL(f"""
+            SELECT
+                id,
+                MAX(last_updated) as last_processed
+            FROM
+                dev_2d_devaint.noise
+            WHERE
+                last_updated.__t__ > {min_time}
+            GROUP BY 
+                id
+            ORDER BY 
+                MAX(last_updated)    
+            LIMIT 
+                5000
+        """)).data
+    })
+
+    all_series = (all_series | previous).values()
+
+    todo = jx.reverse(jx.sort(all_series, {"last_processed": "desc"})[-5000:])
+    needs_update = todo.get("id")
+    Log.alert("{{num}} series are candidates for update", num=len(needs_update))
 
     limited_update = Queue("sigs")
     limited_update.extend(
@@ -96,21 +227,15 @@ def main():
                     return
                 process(sig_id)
 
-        threads = [Thread.run(text(i), loop) for i in range(3)]
+        threads = [Thread.run(text(i), loop, outatime) for i in range(3)]
         for t in threads:
             t.join()
 
     Log.note("Local database is up to date")
 
 
-
-
-
-
-    # PERFORM CALC
-        # PUSH RESULTS
-
 if __name__ == "__main__":
-    main()
+    with Log.start(app_name="etl") as context:
+        main(context.config)
 
 
