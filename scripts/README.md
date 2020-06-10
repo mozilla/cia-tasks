@@ -36,17 +36,6 @@ Also try to make a test secret to ensure you have the permissions to do so.
 
 There is some documentation about [setup of a taskcluster client](https://github.com/taskcluster/taskcluster/tree/master/clients/client-py#setup).  The specifics are below
 
-## Create a new hook
-
-Hooks are used to trigger tasks, and you must [create a hook](https://community-tc.services.mozilla.com/hooks/create). There are a number of options, and you can look over other existing hooks. [Hello World example](https://community-tc.services.mozilla.com/hooks/project-cia/hello-world)
-
-In the task template, be sure to `assume:` the Role ID.
-
-    scopes:
-      - 'assume:hook-id:project-cia/etl-schedulers
-
-### Using secrets locally (linux only)
-
 To test *locally* that your script can fetch secrets you will have to [download a binary](https://github.com/taskcluster/taskcluster/tree/master/clients/client-shell#readme) to set up your credentials. Unfortunately, this only works for Linux (filed [issue](https://github.com/mozilla/cia-tasks/issues/7)).
 
 On Mac OS X, you will need to right click the binary and Open it. That will except the binary from some security measures.
@@ -69,19 +58,24 @@ This is a code snippet that shows you how a secret is fetched using env variable
     print(secret["secret"])
     ```
 
-#### Via script
+## Create a new hook
 
-This WIP.
+Hooks are used to trigger tasks, and you must [create a hook](https://community-tc.services.mozilla.com/hooks/create). There are a number of options, and you can look over other existing hooks. [Hello World example](https://community-tc.services.mozilla.com/hooks/project-cia/hello-world)
 
-On Mac OS X it might prompt to grant a Firewall permission.
+In the task template, be sure to `assume:` the Role ID.
 
-```shell
-cd utils
-# This will open a browser tab, sign in and save the generated client
-# Upon saving you can close the tab and return to the command line
-poetry run generate_client.py
-# TBD
-```
+    scopes:
+      - 'assume:hook-id:project-cia/etl-schedulers
+
+## Generating credentials for local testing
+
+For Linux and Mac follow the official solution.
+
+For Windows users follow these steps:
+
+    ```shell
+    
+    ```
 
 ## How this framework was set up
 
