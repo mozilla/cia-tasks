@@ -1,9 +1,0 @@
-[tool.poetry]
-name = "cia-tasks-utils"
-version = "1.0.0"
-description = "This is the package installer to support the CI-A tasks repo"
-authors = ["Mozilla"]
-
-[tool.poetry.dependencies]
-python = "^3.7"
-six = "^1.14.0"
