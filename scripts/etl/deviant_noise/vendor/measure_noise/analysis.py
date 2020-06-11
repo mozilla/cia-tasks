@@ -34,7 +34,8 @@ def process(
 ):
     if not mo_math.is_integer(sig_id):
         Log.error("expecting integer id")
-    data = get_dataum(db, sig_id)
+    sig = first(get_signature(config.database, sig_id))
+    data = get_dataum(config.database, sig_id)
 
     min_date = (Date.today() - 3 * MONTH).unix
     pushes = jx.sort(
@@ -71,6 +72,22 @@ def process(
             values, sig.alert_change_type, sig.alert_threshold
         )
 
+    # USE PERFHERDER ALERTS TO IDENTIFY OLD SEGMENTS
+    old_segments = tuple(
+        sorted(
+            set(
+                [i for i, p in enumerate(pushes) if any(r.alert.id for r in p.runs)]
+                + [0, len(pushes)]
+            )
+        )
+    )
+    old_medians = [0] + [
+        np.median(values[s:e]) for s, e in zip(old_segments[:-1], old_segments[1:])
+    ]
+    old_diffs = np.array(
+        [b / a - 1 for a, b in zip(old_medians[:-1], old_medians[1:])] + [0]
+    )
+
     if len(new_segments) == 1:
         dev_status = None
         dev_score = None
@@ -89,8 +106,39 @@ def process(
             std=relative_noise,
         )
 
+        if show_distribution:
+            histogram(last_segment, title=dev_status+"="+text(dev_score))
+
     max_extra_diff = None
     max_missing_diff = None
+    _is_diff = is_diff(new_segments, old_segments)
+    if _is_diff:
+        # FOR MISSING POINTS, CALC BIGGEST DIFF
+        max_extra_diff = mo_math.MAX(
+            abs(d)
+            for s, d in zip(new_segments, new_diffs)
+            if all(not (s - TOLLERANCE <= o <= s + TOLLERANCE) for o in old_segments)
+        )
+        max_missing_diff = mo_math.MAX(
+            abs(d)
+            for s, d in zip(old_segments, old_diffs)
+            if all(not (s - TOLLERANCE <= n <= s + TOLLERANCE) for n in new_segments)
+        )
+
+        Log.alert(
+            "Disagree max_extra_diff={{max_extra_diff|round(places=3)}}, max_missing_diff={{max_missing_diff|round(places=3)}}",
+            max_extra_diff=max_extra_diff,
+            max_missing_diff=max_missing_diff,
+        )
+        Log.note("old={{old}}, new={{new}}", old=old_segments, new=new_segments)
+        if show and len(pushes):
+            show_old and assign_colors(values, old_segments, title="OLD " + title)
+            assign_colors(values, new_segments, title="NEW " + title)
+    else:
+        Log.note("Agree")
+        if show and len(pushes):
+            show_old and assign_colors(values, old_segments, title="OLD " + title)
+            assign_colors(values, new_segments, title="NEW " + title)
 
     summary_table.upsert(
         where={"eq": {"id": sig.id}},
@@ -98,15 +146,29 @@ def process(
             id=sig.id,
             title=title,
             num_pushes=len(pushes),
+            is_diff=_is_diff,
             max_extra_diff=max_extra_diff,
             max_missing_diff=max_missing_diff,
             num_new_segments=len(new_segments),
+            num_old_segments=len(old_segments),
             relative_noise=relative_noise,
             dev_status=dev_status,
             dev_score=dev_score,
             last_updated=Date.now(),
         ),
     )
+
+
+def is_diff(A, B):
+    if len(A) != len(B):
+        return True
+
+    for a, b in zip(A, B):
+        if b - TOLLERANCE <= a <= b + TOLLERANCE:
+            continue
+        else:
+            return True
+    return False
 
 
 def update_local_database():
@@ -182,8 +244,181 @@ def main():
             process(id, show=True)
         return
 
-    candidates = get_all_signatures(MySQL(config.database), config.analysis.signatures_sql)
-    update_local_database()
+    candidates = get_all_signatures(config.database, config.analysis.signatures_sql)
+    if not config.args.now:
+        update_local_database()
+
+    # DEVIANT
+    show_sorted(
+        sort={"value": {"abs": "dev_score"}, "sort": "desc"},
+        limit=config.args.deviant,
+        show_old=False,
+        show_distribution=True,
+    )
+
+    # MODAL
+    show_sorted(
+        sort="dev_score",
+        limit=config.args.modal,
+        where={"eq": {"dev_status": "MODAL"}},
+        show_distribution=True,
+    )
+
+    # OUTLIERS
+    show_sorted(
+        sort={"value": "dev_score", "sort": "desc"},
+        limit=config.args.outliers,
+        where={"eq": {"dev_status": "OUTLIERS"}},
+        show_distribution=True,
+    )
+
+    # SKEWED
+    show_sorted(
+        sort={"value": {"abs": "dev_score"}, "sort": "desc"},
+        limit=config.args.skewed,
+        where={"eq": {"dev_status": "SKEWED"}},
+        show_distribution=True,
+    )
+
+    # OK
+    show_sorted(
+        sort={"value": {"abs": "dev_score"}, "sort": "desc"},
+        limit=config.args.ok,
+        where={"eq": {"dev_status": "OK"}},
+        show_distribution=True,
+    )
+
+    # NOISE
+    show_sorted(
+        sort={"value": {"abs": "relative_noise"}, "sort": "desc"},
+        limit=config.args.noise,
+    )
+
+    # EXTRA
+    show_sorted(
+        sort={"value": {"abs": "max_extra_diff"}, "sort": "desc"},
+        where={"lte": {"num_new_segments": 7}},
+        limit=config.args.extra,
+    )
+
+    # MISSING
+    show_sorted(
+        sort={"value": {"abs": "max_missing_diff"}, "sort": "desc"},
+        where={"lte": {"num_old_segments": 6}},
+        limit=config.args.missing,
+    )
+
+    # PATHOLOGICAL
+    show_sorted(
+        sort={"value": "num_new_segments", "sort": "desc"},
+        limit=config.args.pathological,
+    )
 
 
-
+if __name__ == "__main__":
+    config = startup.read_settings(
+        [
+            {
+                "name": ["--id", "--key", "--ids", "--keys"],
+                "dest": "id",
+                "nargs": "*",
+                "type": int,
+                "help": "show specific signatures",
+            },
+            {
+                "name": "--now",
+                "dest": "now",
+                "help": "do not update signatures, go direct to showing problems with what is known locally",
+                "action": "store_true",
+            },
+            {
+                "name": ["--dev", "--deviant", "--deviance"],
+                "dest": "deviant",
+                "nargs": "?",
+                "const": 10,
+                "type": int,
+                "help": "show number of top deviant series",
+                "action": "store",
+            },
+            {
+                "name": ["--modal"],
+                "dest": "modal",
+                "nargs": "?",
+                "const": 10,
+                "type": int,
+                "help": "show number of top modal series",
+                "action": "store",
+            },
+            {
+                "name": ["--outliers"],
+                "dest": "outliers",
+                "nargs": "?",
+                "const": 10,
+                "type": int,
+                "help": "show number of top outliers series",
+                "action": "store",
+            },
+            {
+                "name": ["--skewed", "--skew"],
+                "dest": "skewed",
+                "nargs": "?",
+                "const": 10,
+                "type": int,
+                "help": "show number of top skewed series",
+                "action": "store",
+            },
+            {
+                "name": ["--ok"],
+                "dest": "ok",
+                "nargs": "?",
+                "const": 10,
+                "type": int,
+                "help": "show number of top worst OK series",
+                "action": "store",
+            },
+            {
+                "name": ["--noise", "--noisy"],
+                "dest": "noise",
+                "nargs": "?",
+                "const": 10,
+                "type": int,
+                "help": "show number of top noisiest series",
+                "action": "store",
+            },
+            {
+                "name": ["--extra", "-e"],
+                "dest": "extra",
+                "nargs": "?",
+                "const": 10,
+                "type": int,
+                "help": "show number of series that are missing perfherder alerts",
+                "action": "store",
+            },
+            {
+                "name": ["--missing", "--miss", "-m"],
+                "dest": "missing",
+                "nargs": "?",
+                "const": 10,
+                "type": int,
+                "help": "show number of series which are missing alerts over perfherder",
+                "action": "store",
+            },
+            {
+                "name": ["--pathological", "--pathological", "--pathology", "-p"],
+                "dest": "pathological",
+                "nargs": "?",
+                "const": 3,
+                "type": int,
+                "help": "show number of series that have most edges",
+                "action": "store",
+            },
+        ]
+    )
+    constants.set(config.constants)
+    try:
+        Log.start(config.debug)
+        main()
+    except Exception as e:
+        Log.warning("Problem with perf scan", e)
+    finally:
+        Log.stop()
