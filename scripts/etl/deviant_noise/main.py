@@ -16,14 +16,13 @@ from jx_bigquery import bigquery
 from jx_python import jx
 from measure_noise import deviance
 from measure_noise.analysis import IGNORE_TOP
-from measure_noise.extract_perf import get_dataum, get_signature
-from measure_noise.step_detector import MAX_POINTS, find_segments
+from measure_noise.step_detector import find_segments
 from mo_dots import (
     Data,
     listwrap,
     concat_field,
     set_default,
-    coalesce, to_data, dict_to_data)
+    coalesce, dict_to_data)
 from mo_future import text
 from mo_logs import Log
 from mo_logs.strings import left
@@ -31,6 +30,7 @@ from mo_sql import SQL
 from mo_threads import Till, Queue, Thread
 from mo_times import Duration, Timer, Date, YEAR, MONTH
 
+LOOK_BACK = 3* MONTH
 MAX_RUNTIME = "50minute"  # STOP PROCESSING AFTER THIS GIVEN TIME
 SECRET_PREFIX = "project/cia/deviant-noise"
 SECRET_NAMES = [
@@ -59,29 +59,43 @@ def inject_secrets(config):
 
 
 def process(
-    sig_id,
-    source_db,
-    show=False,
-    show_limit=MAX_POINTS,
-    show_old=True,
-    show_distribution=None
+    signature,
+    source,
+    destination,
 ):
-    sig = get_signature(source_db, sig_id)
-    data = get_dataum(source_db, sig_id)
+    min_time = (Date.today() - LOOK_BACK).unix
 
-    min_date = (Date.today() - 3 * MONTH).unix
-    pushes = jx.sort(
-        [
-            {
-                "value": np.median(rows.value),
-                "runs": rows,
-                "push": {"time": to_data(t).push.time},
-            }
-            for t, rows in jx.groupby(data, "push.time")
-            if t["push\\.time"] > min_date
-        ],
-        "push.time",
-    )
+    # GET SIGNATURE DETAILS
+    sig = source.query(SQL(f"""
+        SELECT
+            signature
+        FROM
+            treeherder_2d_prod.perf
+        WHERE
+            job.signature.signature.__s__ = {signature}
+        ORDER BY
+            push.time.__t__ DESC
+        LIMIT 
+            1
+    """))
+
+    # GET PERF VALUES FOR EACH PUSH
+    pushes = source.query(SQL(f"""
+        SELECT
+            push.time.__t__ as `push.time`, 
+            PERCENTILE_CONT (value.__n__, 0.5) AS value
+        FROM
+            treeherder_2d_prod.perf
+        WHERE
+            push.time.__t__ > {min_time} AND
+            signature.signature.__s__ = {signature}
+        GROUP BY 
+            push.time.__t__
+        ORDER BY
+            push.time.__t__
+        LIMIT 
+            10000
+    """))
 
     values = pushes.value
     title = "-".join(
@@ -136,7 +150,7 @@ def process(
             std=relative_noise,
         )
 
-    summary_table.upsert(
+    destination.upsert(
         where={"eq": {"id": sig.id}},
         doc=Data(
             id=sig.id,
@@ -225,7 +239,7 @@ def main(config):
                 sig_id = limited_update.pop_one()
                 if not sig_id:
                     return
-                process(sig_id)
+                process(sig_id, source, destination)
 
         threads = [Thread.run(text(i), loop, outatime) for i in range(3)]
         for t in threads:
