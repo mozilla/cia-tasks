@@ -2,7 +2,6 @@ import numpy as np
 
 import mo_math
 from jx_python import jx
-from jx_sqlite.container import Container
 from measure_noise import deviance, step_detector
 from measure_noise.extract_perf import get_all_signatures, get_signature, get_dataum
 from measure_noise.step_detector import find_segments, MAX_POINTS, MIN_POINTS
@@ -233,6 +232,9 @@ def show_sorted(sort, limit, where=True, show_distribution=None, show_old=True):
 
 def main():
     global local_container, summary_table, candidates
+
+    from jx_sqlite.container import Container
+
     local_container = Container(kwargs=config.analysis.local_db)
     summary_table = local_container.get_or_create_facts("perf_summary")
 

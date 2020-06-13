@@ -421,6 +421,7 @@ class LoggingContext:
         self.config = config = startup.read_settings()
         constants.set(config.constants)
         Log.start(config.debug)
+        return config
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_val:
@@ -448,10 +449,13 @@ def raise_from_none(e):
 if PY3:
     exec("def raise_from_none(e):\n    raise e from None\n", globals(), locals())
 
-
+from mo_logs import startup
 from mo_logs.log_usingFile import StructuredLogger_usingFile
 from mo_logs.log_usingMulti import StructuredLogger_usingMulti
 from mo_logs.log_usingStream import StructuredLogger_usingStream
+
+# EXPORT
+startup.Log = Log
 
 
 if not Log.main_log:

@@ -17,7 +17,7 @@ from google.oauth2 import service_account
 from jx_base import Container, Facts
 from jx_python import jx
 from mo_dots import listwrap, unwrap, join_field, Null, is_data, Data, wrap, set_default
-from mo_future import is_text, text, first
+from mo_future import is_text, text, first, decorate
 from mo_json import INTEGER
 from mo_kwargs import override
 from mo_logs import Log, Except
@@ -38,7 +38,7 @@ from mo_sql import (
     SQL_DESC,
     SQL_UNION_ALL,
 )
-from mo_threads import Till
+from mo_threads import Till, Lock, Signal, Queue
 from mo_times import MINUTE, Timer
 from mo_times.dates import Date
 
@@ -346,6 +346,8 @@ class Table(Facts):
                 )
 
         self.last_extend = Date.now() - EXTEND_LIMIT
+        self.extend_locker = Lock()
+        self.extend_queue = Queue("wait for extend")
 
     def all_records(self):
         """
@@ -392,7 +394,14 @@ class Table(Facts):
         )
         self.shard = primary_shard.shard
 
-    def extend(self, rows):
+    def extend(self, docs):
+        self.extend_queue.extend(docs)
+        with self.extend_locker:
+            docs = self.extend_queue.pop_all()
+            if docs:
+                self._extend(docs)
+
+    def _extend(self, rows):
         if self.read_only:
             Log.error("not for writing")
         if len(rows) == 0:
@@ -452,9 +461,7 @@ class Table(Facts):
                 and "Your client has issued a malformed or illegal request." in e
             ):
                 Log.error(
-                    "big query complains about:\n{{data|json}}",
-                    data=output,
-                    cause=e
+                    "big query complains about:\n{{data|json}}", data=output, cause=e
                 )
             elif len(rows) > 1 and (
                 "Request payload size exceeds the limit" in e

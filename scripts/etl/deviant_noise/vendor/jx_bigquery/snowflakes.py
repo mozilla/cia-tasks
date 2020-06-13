@@ -107,6 +107,7 @@ class Snowflake(jx_base.Snowflake):
                         es_index=self.es_index,
                         es_type="RECORD",
                         jx_type=OBJECT,
+                        cardinality=1,
                         nested_path=nested_path,
                         last_updated=now,
                     )

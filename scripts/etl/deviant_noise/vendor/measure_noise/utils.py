@@ -1,9 +1,18 @@
-import plotly.graph_objects as go
+from mo_dots import Null
+
+go = Null
+
+
+def _late_import():
+    global go
+    import plotly.graph_objects as go
+
 
 from mo_math import mod
 
 
 def histogram(values, title=None):
+    _late_import()
     fig = go.Figure(
         go.Histogram(x=list(values))
     )
@@ -12,6 +21,7 @@ def histogram(values, title=None):
 
 
 def plot(data, title=None):
+    _late_import()
     fig = go.Figure(
         data=go.Scatter(x=tuple(range(0, len(data))), y=data, mode="markers")
     )
@@ -20,6 +30,7 @@ def plot(data, title=None):
 
 
 def assign_colors(values, segments, title):
+    _late_import()
     next_color = 0
     colors = ["gray"] * len(values)
 

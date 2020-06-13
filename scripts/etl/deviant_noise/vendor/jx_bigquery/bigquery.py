@@ -38,7 +38,7 @@ from mo_sql import (
     SQL_DESC,
     SQL_UNION_ALL,
 )
-from mo_threads import Till
+from mo_threads import Till, Lock, Queue
 from mo_times import MINUTE, Timer
 from mo_times.dates import Date
 
@@ -126,7 +126,7 @@ class Dataset(Container):
             return Table(kwargs=kwargs, container=self)
         except Exception as e:
             e = Except.wrap(e)
-            if "Not found: Table" in e:
+            if not read_only and "Not found: Table" in e:
                 return self.create_table(kwargs)
             Log.error("could not get table {{table}}", table=table, cause=e)
 
@@ -346,15 +346,22 @@ class Table(Facts):
                 )
 
         self.last_extend = Date.now() - EXTEND_LIMIT
+        self.extend_locker = Lock()
+        self.extend_queue = Queue("wait for extend")
 
     def all_records(self):
         """
         MOSTLY FOR TESTING, RETURN ALL RECORDS IN TABLE
         :return:
         """
-        sql = sql_query({"from": self.full_name})
-        query_job = self.container.client.query(text(sql))
+        return self.query(sql_query({"from": self.full_name}))
 
+    def query(self, sql):
+        """
+        :param sql: SQL QUERY
+        :return: GENERATOR OF DOCUMENTS as dict
+        """
+        query_job = self.container.query_and_wait(sql)
         # WE WILL REACH INTO THE _flake, SINCE THIS IS THE FIRST PLACE WE ARE ACTUALLY PULLING RECORDS OUT
         # TODO: WITH MORE CODE THIS LOGIC GOES ELSEWHERE
         _ = self._flake.columns  # ENSURE schema HAS BEEN PROCESSED
@@ -392,7 +399,14 @@ class Table(Facts):
         )
         self.shard = primary_shard.shard
 
-    def extend(self, rows):
+    def extend(self, docs):
+        self.extend_queue.extend(docs)
+        with self.extend_locker:
+            docs = self.extend_queue.pop_all()
+            if docs:
+                self._extend(docs)
+
+    def _extend(self, rows):
         if self.read_only:
             Log.error("not for writing")
         if len(rows) == 0:

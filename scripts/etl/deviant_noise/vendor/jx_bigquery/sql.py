@@ -127,7 +127,11 @@ def unescape_name(esc_name):
         name = "".join(result)
         return name
     except Exception:
-        return esc_name
+        return esc_name.values[0]
+
+
+def sql_time(time):
+    return sql_call("TIMESTAMP_MICROS", quote_value(int(Date(time).unix*1000000)))
 
 
 def sql_alias(value, alias):
