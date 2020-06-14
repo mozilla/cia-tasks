@@ -383,7 +383,10 @@ class Table(Facts):
                 # INSERT TOP LEVEL FIELDS
                 reach = wrap(output)
                 for k, p in top2deep.items():
-                    reach[p] = doc[k]
+                    try:
+                        reach[p] = doc.get(k)
+                    except Exception as cause:
+                        raise cause
                 yield untyped(output)
 
     @property

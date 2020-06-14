@@ -30,7 +30,7 @@ from mo_sql import SQL
 from mo_threads import Till, Queue, Thread
 from mo_times import Duration, Timer, Date, MONTH
 
-NUM_THREADS = 20
+NUM_THREADS = 5
 IGNORE_TOP = 2  # IGNORE SOME OUTLIERS
 LOOK_BACK = 3 * MONTH
 MAX_RUNTIME = "50minute"  # STOP PROCESSING AFTER THIS GIVEN TIME
@@ -150,10 +150,11 @@ def process(
         trimmed_segment = normalized
         overall_dev_status, overall_dev_score = deviance(trimmed_segment)
         Log.note(
-            "\n\tdeviance = {{deviance}}\n\tnoise={{std}}",
+            "\n\tdeviance = {{deviance}}\n\tnoise={{std}}\n\tpushes={{pushes}}",
             title=title,
             deviance=(overall_dev_status, overall_dev_score),
             std=relative_noise,
+            pushes=len(values)
         )
 
     destination.add(
@@ -181,32 +182,37 @@ def main(config):
 
     # GET SOURCE
     source = bigquery.Dataset(config.source).get_or_create_table(read_only=True, kwargs=config.source)
-    # GET ALL KNOWN SERIES
 
+    # SETUP DESTINATION
+    destination = bigquery.Dataset(config.destination).get_or_create_table(config.destination)
+    # ENSURE SHARDS ARE MERGED
+    destination.merge_shards()
+
+    # GET ALL KNOWN SERIES
     min_time = sql_time((Date.today() - LOOK_BACK))
     all_series = dict_to_data({
         doc['id']: doc
         for doc in source.query(SQL(f"""
             SELECT 
-                signature.signature__hash.__s__ as id, 
-                max(push.time.__t__) as last_updated
+                s.signature.signature__hash.__s__ as id, 
+                max(s.push.time.__t__) as last_updated
             FROM 
-                {quote_column(source.full_name)}
+                {quote_column(source.full_name)} as s
+            LEFT JOIN
+                {quote_column(destination.full_name)} AS d ON d.id = signature.signature__hash.__s__  
             WHERE
-                push.time.__t__ > {min_time} AND
-                signature.signature__hash.__s__ IS NOT NULL AND
-                push.repository.__s__ IN ("autoland", "mozilla-central")
+                d.id is NULL AND
+                s.push.time.__t__ > {min_time} AND
+                s.signature.signature__hash.__s__ IS NOT NULL AND
+                s.push.repository.__s__ IN ("autoland", "mozilla-central")
             GROUP BY  
-                signature.signature__hash.__s__
+                s.signature.signature__hash.__s__
             ORDER BY
-                last_updated
+                last_updated DESC  # MOST ACTIVE FIRST
             LIMIT 
                 5000
         """))
     })
-
-    # SETUP DESTINATION
-    destination = bigquery.Dataset(config.destination).get_or_create_table(config.destination)
 
     # PULL PREVIOUS SERIES
     previous = dict_to_data({
@@ -218,7 +224,8 @@ def main(config):
             FROM
                 {quote_column(destination.full_name)}
             WHERE
-                last_updated > {min_time}
+                last_updated > {min_time} AND
+                num__pushes.__i__ > 0
             GROUP BY 
                 id
             ORDER BY 
@@ -237,18 +244,21 @@ def main(config):
     limited_update = Queue("sigs")
     limited_update.extend(needs_update)
 
-
     with Timer("Updating local database"):
         def loop(please_stop):
             while not please_stop:
                 sig_id = limited_update.pop_one()
                 if not sig_id:
                     return
-                process(sig_id, min_time, source, destination)
-
+                try:
+                    process(sig_id, min_time, source, destination)
+                except Exception as cause:
+                    Log.warning("Could not process {{sig}}", sig=sig_id, cause=cause)
         threads = [Thread.run(text(i), loop, please_stop=outatime) for i in range(NUM_THREADS)]
         for t in threads:
             t.join()
+
+    destination.merge_shards()
 
     Log.note("Local database is up to date")
 

@@ -5,7 +5,7 @@ from scipy.stats import stats, rankdata
 from jx_python import jx
 from measure_noise.utils import plot
 from mo_collections import not_right, not_left
-from mo_dots import Data
+from mo_dots import Data, coalesce
 from mo_logs import Except
 from mo_math import ceiling
 
@@ -28,14 +28,17 @@ weight_radius = len(median_weight) // 2
 SHOW_CHARTS and plot(median_weight, title="WEIGHT")
 
 PERFHERDER_THRESHOLD_TYPE_ABS = 1
+DEFAULT_THRESHOLD = 0.03
 
 
 def find_segments(values, diff_type, diff_threshold):
     if len(values) == 0:
         return (0,), (0,)
+    diff_threshold = coalesce(diff_threshold, DEFAULT_THRESHOLD)
 
-    values = np.array(values)
-    logs = np.log(values)
+    values = logs = np.array(values)
+    if np.all(values > 0):
+        logs = np.log(values)
     ranks = rankdata(values)
 
     SHOW_CHARTS and plot(ranks/len(values), title="RANKS")
@@ -71,7 +74,12 @@ def find_segments(values, diff_type, diff_threshold):
             np.median(values[best_mid:e]) / np.median(values[s:best_mid]) - 1
         )
 
-        if diff_percent < diff_threshold / 100:
+        try:
+            too_small = diff_percent < diff_threshold / 100
+        except Exception as cause:
+            raise cause
+
+        if too_small:
             # DIFFERENCE IS TOO SMALL
             segments[i + 1] = segments[i]
             continue
