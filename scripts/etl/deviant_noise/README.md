@@ -2,21 +2,21 @@
 
 Schedule jobs that pull Perfherder performance data, and produce devaint noise aggregates for every series
 
-## Coding
+## Contributing to Development
 
 ### Install 
 
 Install into virtual machine using the directory of this README as current directory
 
-    python -m pip install virtualenv
-    python -m virtualenv .venv             
+    c:\python37\python.exe -m pip install virtualenv
+    c:\python37\python.exe -m virtualenv .venv             
     .venv\Scripts\activate
     
-the moxci has some conflicting requirements, they can be sorted with `pip-tools`    
+We use `pip-compile` to generate a fixed requirements.txt file  
     
-    pip3 install pip-tools
+    pip install pip-tools
     pip-compile --upgrade --generate-hashes --output-file requirements.txt requirements.in
-    pip3 install -r requirements.txt
+    pip install -r requirements.txt
 
 then you may run the schedulers ETL
 

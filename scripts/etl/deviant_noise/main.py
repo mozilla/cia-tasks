@@ -34,32 +34,9 @@ NUM_THREADS = 5
 IGNORE_TOP = 2  # IGNORE SOME OUTLIERS
 LOOK_BACK = 3 * MONTH
 MAX_RUNTIME = "50minute"  # STOP PROCESSING AFTER THIS GIVEN TIME
-SECRET_PREFIX = "project/cia/deviant-noise"
-SECRET_NAMES = [
-    "destination.account_info",
-]
+
 # REGISTER float64
 python_type_to_json_type[np.float64] = NUMBER
-
-
-def inject_secrets(config):
-    """
-    INJECT THE SECRETS INTO THE CONFIGURATION
-    :param config: CONFIG DATA
-
-    ************************************************************************
-    ** ENSURE YOU HAVE AN ENVIRONMENT VARIABLE SET:
-    ** TASKCLUSTER_ROOT_URL = https://community-tc.services.mozilla.com
-    ************************************************************************
-    """
-    with Timer("get secrets"):
-        secrets = taskcluster.Secrets(config.taskcluster)
-        acc = Data()
-        for s in listwrap(SECRET_NAMES):
-            secret_name = concat_field(SECRET_PREFIX, s)
-            Log.note("get secret named {{name|quote}}", name=secret_name)
-            acc[s] = secrets.get(secret_name)["secret"]
-        set_default(config, acc)
 
 
 def process(
