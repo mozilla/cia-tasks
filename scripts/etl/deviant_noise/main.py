@@ -71,6 +71,8 @@ def process(
     if len(new_segments) == 1:
         overall_dev_status = None
         overall_dev_score = None
+        last_mean = None
+        last_std = None
         last_dev_status = None
         last_dev_score = None
         relative_noise = None
@@ -91,8 +93,7 @@ def process(
             norm = (data + last_mean - np.mean(data)) * last_std / np.std(data)
             normalized.extend(norm)
 
-        trimmed_segment = normalized
-        overall_dev_status, overall_dev_score = deviance(trimmed_segment)
+        overall_dev_status, overall_dev_score = deviance(normalized)
         Log.note(
             "\n\tdeviance = {{deviance}}\n\tnoise={{std}}\n\tpushes={{pushes}}\n\tsegments={{num_segments}}",
             title=title,
