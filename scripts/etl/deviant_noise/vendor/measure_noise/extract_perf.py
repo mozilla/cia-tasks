@@ -1,28 +1,26 @@
+from mo_future import first
+
+from jx_mysql.mysql import quote_list, MySQL
 from mo_dots import listwrap
-from mo_future import text
 from mo_logs.strings import expand_template
-from jx_mysql.mysql import MySQL, quote_list
 
 
-def get_all_signatures(db_config, sql):
+def get_all_signatures(signature, sql):
     """
     RETURN ALL SIGNATURES FROM PERFHERDER DATABASE
     """
-    db = MySQL(db_config)
-    with db:
-        return db.query(text(sql))
+    with signature:
+        return signature.query(sql)
 
 
-def get_signature(db_config, signature_id):
-    db = MySQL(db_config)
-    with db:
-        return db.query(expand_template(signature_sql, quote_list(listwrap(signature_id))))
+def get_signature(source, signature):
+    with MySQL(kwargs=source.settings) as source:
+        return first(source.query(expand_template(signature_sql, quote_list(listwrap(signature)))))
 
 
-def get_dataum(db_config, signature_id):
-    db = MySQL(db_config)
-    with db:
-        return db.query(expand_template(datum_sql, quote_list(listwrap(signature_id))))
+def get_dataum(source, signature):
+    with MySQL(kwargs=source.settings) as source:
+        return source.query(expand_template(datum_sql, quote_list(listwrap(signature))))
 
 
 signature_sql = """
@@ -49,7 +47,7 @@ signature_sql = """
         t3.option_collection_hash as `option_collection.hash`,
         t4.name AS framework, 
         t5.platform AS platform, 
-        t6.name AS `repository.name`
+        t6.name AS `repository`
     FROM
         performance_signature t1
     LEFT JOIN
@@ -63,7 +61,9 @@ signature_sql = """
     LEFT JOIN
         repository AS t6 ON t6.id = t1.repository_id
     WHERE
-        t1.id IN {{signature}} 
+        t1.signature_hash IN {{signature}}
+    ORDER BY 
+        t1.last_updated DESC
 """
 
 
@@ -102,6 +102,8 @@ datum_sql = """
             a.`last_updated` AS `alert.last_updated`
         FROM
             performance_datum AS d
+        JOIN 
+            performance_signature sig on sig.id=d.signature_id
         LEFT JOIN
             job AS t3 ON t3.id = d.job_id
         LEFT JOIN
@@ -114,7 +116,7 @@ datum_sql = """
             performance_alert a on a.summary_id = s.id AND a.series_signature_id = d.signature_id AND a.manually_created=0
         WHERE
             p.time > DATE_ADD(DATE(NOW()), INTERVAL -3 MONTH) AND
-            d.signature_id in {{signature}}
+            sig.signature_hash in {{signature}}
         ORDER BY
             p.time DESC
     """

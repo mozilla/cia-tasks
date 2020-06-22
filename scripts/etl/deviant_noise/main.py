@@ -10,20 +10,18 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import numpy as np
-import taskcluster
 
 from jx_bigquery import bigquery
-from jx_bigquery.sql import sql_time, quote_column, quote_value
+from jx_bigquery.sql import sql_time, quote_column
+from jx_mysql.mysql import MySQL
 from jx_python import jx
 from measure_noise import deviance
+from measure_noise.extract_perf import get_signature, get_dataum
 from measure_noise.step_detector import find_segments
 from mo_dots import (
     Data,
-    listwrap,
-    concat_field,
-    set_default,
-    dict_to_data, to_data)
-from mo_future import text, first
+    dict_to_data)
+from mo_future import text
 from mo_json import NUMBER, python_type_to_json_type
 from mo_logs import Log
 from mo_sql import SQL
@@ -46,41 +44,10 @@ def process(
     destination,
 ):
     # GET SIGNATURE DETAILS
-    sig = to_data(first(source.query(SQL(f"""
-        SELECT
-            signature
-        FROM
-            treeherder_2d_prod.perf
-        WHERE
-            signature.signature__hash.__s__ = {quote_value(signature)}
-        ORDER BY
-            push.time.__t__ DESC
-        LIMIT 
-            1
-    """)))).signature
+    sig = get_signature(source, signature)
 
     # GET PERF VALUES FOR EACH PUSH
-    pushes = source.query(SQL(f"""
-        SELECT 
-            push_time,
-            ANY_VALUE(value) as value
-        FROM (
-            SELECT
-                push.time.__t__ as push_time, 
-                PERCENTILE_CONT (value.__n__, 0.5) OVER(PARTITION BY push.time.__t__) AS value
-            FROM
-                treeherder_2d_prod.perf
-            WHERE
-                push.time.__t__ > {min_time} AND
-                signature.signature__hash.__s__ = {quote_value(signature)}
-            ) as a 
-        GROUP BY 
-            push_time
-        ORDER BY
-            push_time
-        LIMIT 
-            10000
-    """))
+    pushes = get_dataum(source, signature)
 
     title = "-".join(
         map(
@@ -157,8 +124,7 @@ def main(config):
     outatime = Till(seconds=Duration(MAX_RUNTIME).total_seconds())
     outatime.then(lambda: Log.alert("Out of time, exit early"))
 
-    # GET SOURCE
-    source = bigquery.Dataset(config.source).get_or_create_table(read_only=True, kwargs=config.source)
+    source = MySQL(config.source)
 
     # SETUP DESTINATION
     destination = bigquery.Dataset(config.destination).get_or_create_table(config.destination)
@@ -166,30 +132,25 @@ def main(config):
     destination.merge_shards()
 
     # GET ALL KNOWN SERIES
-    min_time = sql_time((Date.today() - LOOK_BACK))
-    all_series = dict_to_data({
-        doc['id']: doc
-        for doc in source.query(SQL(f"""
-            SELECT 
-                s.signature.signature__hash.__s__ as id, 
-                max(s.push.time.__t__) as last_updated
-            FROM 
-                {quote_column(source.full_name)} as s
-            LEFT JOIN
-                {quote_column(destination.full_name)} AS d ON d.id = signature.signature__hash.__s__  
-            WHERE
-                d.id is NULL AND
-                s.push.time.__t__ > {min_time} AND
-                s.signature.signature__hash.__s__ IS NOT NULL AND
-                s.push.repository.__s__ IN ("autoland", "mozilla-central")
-            GROUP BY  
-                s.signature.signature__hash.__s__
-            ORDER BY
-                last_updated DESC  # MOST ACTIVE FIRST
-            LIMIT 
-                5000
-        """))
-    })
+    with source as t:
+        min_time = sql_time((Date.today() - LOOK_BACK))
+        all_series = dict_to_data({
+            doc['id']: doc
+            for doc in t.query(SQL(f"""
+                SELECT MAX(s.signature_hash) id
+                FROM (            
+                    SELECT d.signature_id, d.push_timestamp
+                    FROM performance_datum d 
+                    WHERE d.repository_id IN (77, 1)  -- autoland, mozilla-central
+                    ORDER BY d.id desc
+                    LIMIT 1000000
+                ) d
+                LEFT JOIN performance_signature s on s.id= d.signature_id
+                WHERE s.test IS NULL or s.test='' or s.test=s.suite
+                GROUP BY d.signature_id
+                ORDER BY MAX(d.push_timestamp) DESC
+            """))
+        })
 
     # PULL PREVIOUS SERIES
     previous = dict_to_data({

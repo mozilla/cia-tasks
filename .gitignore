@@ -5,6 +5,7 @@
 /cache
 __pycache__
 /*.iml
+.pem
 /scripts/etl/schedulers/vendor/mo_times/vendor/dateutil/zoneinfo
 /deviant-noise/*.iml
 /scripts/etl/deviant_noise/requirements.txt
