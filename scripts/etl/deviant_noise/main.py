@@ -39,7 +39,7 @@ python_type_to_json_type[np.float64] = NUMBER
 
 def process(
     signature,
-    min_time,
+    since,
     source,
     destination,
 ):
@@ -47,7 +47,7 @@ def process(
     sig = get_signature(source, signature)
 
     # GET PERF VALUES FOR EACH PUSH
-    pushes = get_dataum(source, signature)
+    pushes = get_dataum(source, signature, since)
 
     title = "-".join(
         map(
@@ -94,11 +94,12 @@ def process(
         trimmed_segment = normalized
         overall_dev_status, overall_dev_score = deviance(trimmed_segment)
         Log.note(
-            "\n\tdeviance = {{deviance}}\n\tnoise={{std}}\n\tpushes={{pushes}}",
+            "\n\tdeviance = {{deviance}}\n\tnoise={{std}}\n\tpushes={{pushes}}\n\tsegments={{num_segments}}",
             title=title,
             deviance=(overall_dev_status, overall_dev_score),
             std=relative_noise,
-            pushes=len(values)
+            pushes=len(values),
+            num_segments=len(new_segments)-1
         )
 
     destination.add(
@@ -123,8 +124,7 @@ def process(
 def main(config):
     outatime = Till(seconds=Duration(MAX_RUNTIME).total_seconds())
     outatime.then(lambda: Log.alert("Out of time, exit early"))
-
-    source = MySQL(config.source)
+    since = Date.today()-LOOK_BACK
 
     # SETUP DESTINATION
     destination = bigquery.Dataset(config.destination).get_or_create_table(config.destination)
@@ -132,8 +132,7 @@ def main(config):
     destination.merge_shards()
 
     # GET ALL KNOWN SERIES
-    with source as t:
-        min_time = sql_time((Date.today() - LOOK_BACK))
+    with MySQL(config.source) as t:
         all_series = dict_to_data({
             doc['id']: doc
             for doc in t.query(SQL(f"""
@@ -162,7 +161,7 @@ def main(config):
             FROM
                 {quote_column(destination.full_name)}
             WHERE
-                last_updated > {min_time} AND
+                last_updated > {sql_time(since)} AND
                 num__pushes.__i__ > 0
             GROUP BY 
                 id
@@ -189,7 +188,7 @@ def main(config):
                 if not sig_id:
                     return
                 try:
-                    process(sig_id, min_time, source, destination)
+                    process(sig_id, since, config.source, destination)
                 except Exception as cause:
                     Log.warning("Could not process {{sig}}", sig=sig_id, cause=cause)
         threads = [Thread.run(text(i), loop, please_stop=outatime) for i in range(NUM_THREADS)]

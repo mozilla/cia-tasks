@@ -2,6 +2,7 @@ import numpy as np
 
 import mo_math
 from jx_python import jx
+from main import LOOK_BACK
 from measure_noise import deviance, step_detector
 from measure_noise.extract_perf import get_all_signatures, get_signature, get_dataum
 from measure_noise.step_detector import find_segments, MAX_POINTS, MIN_POINTS
@@ -29,12 +30,12 @@ candidates = Null
 
 
 def process(
-    sig_id, show=False, show_limit=MAX_POINTS, show_old=True, show_distribution=None
+    signature, since, show=False, show_limit=MAX_POINTS, show_old=True, show_distribution=None
 ):
-    if not mo_math.is_integer(sig_id):
+    if not mo_math.is_integer(signature):
         Log.error("expecting integer id")
-    sig = first(get_signature(config.database, sig_id))
-    data = get_dataum(config.database, sig_id)
+    sig = first(get_signature(config.database, signature))
+    data = get_dataum(config.database, signature, since)
 
     min_date = (Date.today() - 3 * MONTH).unix
     pushes = jx.sort(
@@ -235,6 +236,7 @@ def main():
 
     from jx_sqlite.container import Container
 
+    since = Date.today()-LOOK_BACK
     local_container = Container(kwargs=config.analysis.local_db)
     summary_table = local_container.get_or_create_facts("perf_summary")
 
@@ -243,7 +245,7 @@ def main():
         if len(config.args.id) < 4:
             step_detector.SHOW_CHARTS = True
         for id in config.args.id:
-            process(id, show=True)
+            process(id, since=since, show=True)
         return
 
     candidates = get_all_signatures(config.database, config.analysis.signatures_sql)
