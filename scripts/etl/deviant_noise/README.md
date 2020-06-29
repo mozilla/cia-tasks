@@ -2,6 +2,8 @@
 
 Schedule jobs that pull Perfherder performance data, and produce devaint noise aggregates for every series
 
+https://docs.google.com/document/d/14_i11KVVvd8keyUROAW0xgRTldoWCx0OZS8kXUuSH2o/edit
+
 ## Contributing to Development
 
 ### Install 
@@ -26,6 +28,3 @@ then you may run the schedulers ETL
 
 ### Execution
 
-#### Scope for S3 cache
-
-auth:aws-s3:read-write:communitytc-bugbug/data/adr_cache/*
