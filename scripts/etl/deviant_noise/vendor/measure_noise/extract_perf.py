@@ -1,10 +1,19 @@
-from mo_sql import SQL
-
-from mo_future import first
+# encoding: utf-8
+#
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
+#
+from __future__ import absolute_import, division, unicode_literals
 
 from jx_mysql.mysql import quote_list, MySQL, quote_value
 from mo_dots import listwrap
+from mo_future import first
 from mo_logs.strings import expand_template
+from mo_sql import SQL
 
 
 def get_all_signatures(db_config, sql):
@@ -27,7 +36,7 @@ def get_signature(db_config, signature_id):
 signature_sql = """
     SELECT
         t1.id , 
-        t1.signature_hash , 
+        t1.signature_hash, 
         t1.suite ,
         t1.test ,
         UNIX_TIMESTAMP(t1.last_updated) as last_updated,
@@ -96,7 +105,7 @@ def get_dataum(db_config, signature_id, since):
             a.`is_regression` AS `alert.isregression`,
             a.`status` AS `alert.status`,
             a.`amount_pct` AS `alert.amount_pct`,
-            a.`amount_abs` AS `alert.anount_abs`,
+            a.`amount_abs` AS `alert.amount_abs`,
             a.`prev_value` AS `alert.prev_value`,
             a.`new_value` AS `alert.new_value`,
             a.`t_value` AS `alert.t_value`,

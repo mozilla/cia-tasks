@@ -1,13 +1,21 @@
+# encoding: utf-8
+#
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
+#
+from __future__ import absolute_import, division, unicode_literals
+
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 from scipy.stats import stats, rankdata
 
-from jx_python import jx
 from measure_noise.utils import plot
-from mo_collections import not_right, not_left
 from mo_dots import Data, coalesce
 from mo_logs import Except
-from mo_math import ceiling
 
 SHOW_CHARTS = False
 
@@ -32,6 +40,7 @@ DEFAULT_THRESHOLD = 0.03
 
 
 def find_segments(values, diff_type, diff_threshold):
+    values = list(values)
     if len(values) == 0:
         return (0,), (0,)
     diff_threshold = coalesce(diff_threshold, DEFAULT_THRESHOLD)
