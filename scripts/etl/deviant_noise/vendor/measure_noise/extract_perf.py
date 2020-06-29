@@ -19,13 +19,61 @@ def get_all_signatures(db_config, sql):
 def get_signature(db_config, signature_id):
     db = MySQL(db_config)
     with db:
-        return first(db.query(expand_template(signature_sql, quote_list(listwrap(signature_id)))))
+        return first(
+            db.query(expand_template(signature_sql, quote_list(listwrap(signature_id))))
+        )
+
+
+signature_sql = """
+    SELECT
+        t1.id , 
+        t1.signature_hash , 
+        t1.suite ,
+        t1.test ,
+        UNIX_TIMESTAMP(t1.last_updated) as last_updated,
+        t1.lower_is_better,
+        t1.has_subtests ,
+        t1.alert_threshold,
+        t1.fore_window ,
+        t1.max_back_window,
+        t1.min_back_window ,
+        t1.should_alert, 
+        t1.extra_options ,
+        t1.alert_change_type,
+        t1.measurement_unit,
+        t1.application ,
+        t1.suite_public_name,
+        t1.test_public_name ,
+        t1.tags,
+        t3.option_collection_hash as `option_collection.hash`,
+        t4.name AS framework, 
+        t5.platform AS platform, 
+        t6.name AS `repository`
+    FROM
+        performance_signature t1
+    LEFT JOIN
+        performance_signature AS t2 ON t2.id = t1.parent_signature_id
+    LEFT JOIN
+        option_collection AS t3 ON t3.id = t1.option_collection_id
+    LEFT JOIN
+        performance_framework AS t4 ON t4.id = t1.framework_id
+    LEFT JOIN
+        machine_platform AS t5 ON t5.id = t1.platform_id
+    LEFT JOIN
+        repository AS t6 ON t6.id = t1.repository_id
+    WHERE
+        t1.signature_hash IN {{signature}}
+    ORDER BY 
+        t1.last_updated DESC
+"""
 
 
 def get_dataum(db_config, signature_id, since):
     db = MySQL(db_config)
     with db:
-        return db.query(SQL(f"""
+        return db.query(
+            SQL(
+                f"""
         SELECT
             d.id,
             d.value,
@@ -81,49 +129,6 @@ def get_dataum(db_config, signature_id, since):
             sig.signature_hash in {quote_list(listwrap(signature_id))}
         ORDER BY
             p.time DESC
-        """))
-
-
-signature_sql = """
-    SELECT
-        t1.id , 
-        t1.signature_hash , 
-        t1.suite ,
-        t1.test ,
-        UNIX_TIMESTAMP(t1.last_updated) as last_updated,
-        t1.lower_is_better,
-        t1.has_subtests ,
-        t1.alert_threshold,
-        t1.fore_window ,
-        t1.max_back_window,
-        t1.min_back_window ,
-        t1.should_alert, 
-        t1.extra_options ,
-        t1.alert_change_type,
-        t1.measurement_unit,
-        t1.application ,
-        t1.suite_public_name,
-        t1.test_public_name ,
-        t1.tags,
-        t3.option_collection_hash as `option_collection.hash`,
-        t4.name AS framework, 
-        t5.platform AS platform, 
-        t6.name AS `repository`
-    FROM
-        performance_signature t1
-    LEFT JOIN
-        performance_signature AS t2 ON t2.id = t1.parent_signature_id
-    LEFT JOIN
-        option_collection AS t3 ON t3.id = t1.option_collection_id
-    LEFT JOIN
-        performance_framework AS t4 ON t4.id = t1.framework_id
-    LEFT JOIN
-        machine_platform AS t5 ON t5.id = t1.platform_id
-    LEFT JOIN
-        repository AS t6 ON t6.id = t1.repository_id
-    WHERE
-        t1.signature_hash IN {{signature}}
-    ORDER BY 
-        t1.last_updated DESC
-"""
-
+        """
+            )
+        )
