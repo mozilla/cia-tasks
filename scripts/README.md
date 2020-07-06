@@ -103,6 +103,9 @@ In the task template, be sure to `assume:` the Role ID.
     scopes:
       - 'assume:hook-id:project-cia/etl-schedulers
 
+> **<span style="color:blue">IMPORTANT: The role and the hook must have matching names</span>**
+
+
 #### Credentials
 
 Taskcluster will provide `TASKCLUSTER_PROXY_URL` environment variable to running tasks. This value can be used as the `rootUrl`, and without credentials.  
