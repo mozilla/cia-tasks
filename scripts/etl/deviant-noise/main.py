@@ -9,14 +9,12 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-
-
 from jx_bigquery import bigquery
 from jx_bigquery.sql import quote_column, quote_value
 from jx_mysql.mysql import MySQL
 from jx_python import jx
 from measure_noise.analysis_etl import process
-from mo_dots import dict_to_data, listwrap, Data, concat_field, set_default
+from mo_dots import dict_to_data, listwrap, Data, concat_field
 from mo_future import text
 from mo_logs import Log
 from mo_sql import SQL
