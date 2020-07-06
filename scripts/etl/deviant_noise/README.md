@@ -25,6 +25,5 @@ then you may run the schedulers ETL
     export PYTHONPATH=.:vendor
     python3 main.py --config=config-local.json
     
-
-### Execution
+you will require keys for both the Treeherder database and Google BigQuery
 
