@@ -13,7 +13,7 @@ from collections import Mapping
 
 from jx_base.query import _normalize_sort, _normalize_select
 from jx_python import jx
-from mo_dots import wrap, split_field
+from mo_dots import wrap, split_field, Null
 from mo_files.url import hex2chr
 from mo_future import text, first, is_text
 from mo_logs import Log
@@ -38,7 +38,7 @@ from mo_sql import (
     SQL_AS,
     SQL_ASC,
     SQL_DESC,
-    SQL_LIMIT)
+    SQL_LIMIT, SQL_STAR)
 from mo_times import Date, Duration
 
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
@@ -196,7 +196,7 @@ def sql_lt(**item):
     return ConcatSQL(quote_column(k), SQL_LT, quote_value(v))
 
 
-def sql_query(query, schema):
+def sql_query(query, schema=Null):
     """
     VERY BASIC QUERY EXPRESSION TO SQL
     :param query: jx-expression
@@ -208,17 +208,20 @@ def sql_query(query, schema):
     query = wrap(query)
 
     acc = [SQL_SELECT]
-
-    select = _normalize_select(query.select, query['from'], schema)
-    acc.append(
-        JoinSQL(
-            SQL_COMMA,
-            [
-                sql_alias(BQLang[jx_expression(s.value)].to_bq(schema), escape_name(s.name))
-                for s in select
-            ],
+    if not query.select:
+        acc.append(SQL_STAR)
+    else:
+        # COMPLICATED
+        select = _normalize_select(query.select, query['from'], schema)
+        acc.append(
+            JoinSQL(
+                SQL_COMMA,
+                [
+                    sql_alias(BQLang[jx_expression(s.value)].to_bq(schema), escape_name(s.name))
+                    for s in select
+                ],
+            )
         )
-    )
 
     acc.append(SQL_FROM)
     acc.append(quote_column(ApiName(*split_field(query["from"]))))

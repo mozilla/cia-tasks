@@ -13,7 +13,7 @@ import numpy as np
 
 import mo_math
 from jx_bigquery import bigquery
-from jx_bigquery.sql import sql_time, quote_column
+from jx_bigquery.sql import sql_time, quote_column, quote_value
 from jx_mysql.mysql import MySQL
 from jx_python import jx
 from measure_noise import deviance
@@ -23,16 +23,17 @@ from mo_dots import (
     Data,
     dict_to_data)
 from mo_future import text
-from mo_json import NUMBER, python_type_to_json_type
+from mo_json import NUMBER, python_type_to_json_type, scrub
 from mo_logs import Log
 from mo_sql import SQL
 from mo_threads import Till, Queue, Thread
-from mo_times import Duration, Timer, Date, MONTH
+from mo_times import Duration, Timer, Date, MONTH, DAY
 
 NUM_THREADS = 5
 IGNORE_TOP = 2  # IGNORE SOME OUTLIERS
 LOOK_BACK = 3 * MONTH
 MAX_RUNTIME = "50minute"  # STOP PROCESSING AFTER THIS GIVEN TIME
+STALE = 3 * DAY  # DO NOT UPDATE DATA THAT IS NOT STALE
 
 # REGISTER float64
 python_type_to_json_type[np.float64] = NUMBER
@@ -132,7 +133,7 @@ def process(
             last_dev_score=last_dev_score,
             last_updated=Date.now(),
             values=values,
-        )
+        ) | scrub(sig)
     )
 
 
@@ -148,7 +149,7 @@ def main(config):
 
     # GET ALL KNOWN SERIES
     with MySQL(config.source) as t:
-        all_series = dict_to_data({
+        recently_updated_series = dict_to_data({
             doc['id']: doc
             for doc in t.query(SQL(f"""
                 SELECT MAX(s.signature_hash) id
@@ -167,29 +168,23 @@ def main(config):
         })
 
     # PULL PREVIOUS SERIES
-    previous = dict_to_data({
+    recently_scanned = dict_to_data({
         doc['id']: doc
-        for doc in destination.query(SQL(f"""
+        for doc in destination.sql_query(SQL(f"""
             SELECT
                 id,
                 MAX(last_updated) as last_processed
             FROM
                 {quote_column(destination.full_name)}
-            WHERE
-                last_updated > {sql_time(since)} AND
-                num__pushes.__i__ > 0
             GROUP BY 
                 id
-            ORDER BY 
-                MAX(last_updated)    
-            LIMIT 
-                5000
+            HAVING 
+                MAX(last_updated) >= {quote_value(Date.now()-STALE)}
         """))
     })
 
-    all_series = (all_series | previous).values()
-
-    todo = jx.reverse(jx.sort(all_series, {"last_processed": "desc"})).limit(5000)
+    todo = [v for k, v in recently_updated_series.items() if k not in recently_scanned]
+    todo = jx.reverse(jx.sort(todo, {"last_processed": "desc"})).limit(5000)
     needs_update = todo.get("id")
     Log.alert("{{num}} series are candidates for update", num=len(needs_update))
 

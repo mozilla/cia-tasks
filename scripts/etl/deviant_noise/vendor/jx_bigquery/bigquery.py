@@ -240,7 +240,7 @@ class Dataset(BaseContainer):
             SQL("CREATE VIEW\n"),
             quote_column(view_api_name),
             SQL_AS,
-            sql_query({"from": shard_api_name}),
+            sql_query({"from": join_field(shard_api_name.values)}),
         )
         job = self.query_and_wait(sql)
         if job.errors:
