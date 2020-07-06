@@ -1,7 +1,10 @@
 {
   "source": {
     "schema": "treeherder",
-    "debug": false
+    "debug": false,
+    "ssl": {
+      "pem": "https://s3.amazonaws.com/rds-downloads/rds-combined-ca-bundle.pem"
+    }
   },
   "taskcluster": {
     "rootUrl": {"$ref": "env://TASKCLUSTER_PROXY_URL"}
