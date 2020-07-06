@@ -9,12 +9,14 @@
 from __future__ import division
 from __future__ import unicode_literals
 
+import taskcluster
+
 from jx_bigquery import bigquery
 from jx_bigquery.sql import quote_column, quote_value
 from jx_mysql.mysql import MySQL
 from jx_python import jx
 from measure_noise.analysis_etl import process
-from mo_dots import dict_to_data
+from mo_dots import dict_to_data, listwrap, Data, concat_field, set_default
 from mo_future import text
 from mo_logs import Log
 from mo_sql import SQL
@@ -25,6 +27,31 @@ NUM_THREADS = 5
 LOOK_BACK = 3 * MONTH
 MAX_RUNTIME = "50minute"  # STOP PROCESSING AFTER THIS GIVEN TIME
 STALE = 3 * DAY  # DO NOT UPDATE DATA THAT IS NOT STALE
+SECRET_PREFIX = "project/cia/deviant_noise"
+SECRET_NAMES = [
+    "destination.account_info",
+    "source"
+]
+
+
+def inject_secrets(config):
+    """
+    INJECT THE SECRETS INTO THE CONFIGURATION
+    :param config: CONFIG DATA
+
+    ************************************************************************
+    ** ENSURE YOU HAVE AN ENVIRONMENT VARIABLE SET:
+    ** TASKCLUSTER_ROOT_URL = https://community-tc.services.mozilla.com
+    ************************************************************************
+    """
+    with Timer("get secrets"):
+        secrets = taskcluster.Secrets(config.taskcluster)
+        acc = Data()
+        for s in listwrap(SECRET_NAMES):
+            secret_name = concat_field(SECRET_PREFIX, s)
+            Log.note("get secret named {{name|quote}}", name=secret_name)
+            acc[s] = secrets.get(secret_name)["secret"]
+        config |= acc
 
 
 def main(config):
@@ -102,6 +129,7 @@ def main(config):
 
 if __name__ == "__main__":
     with Log.start(app_name="etl") as config:
+        inject_secrets(config)
         main(config)
 
 

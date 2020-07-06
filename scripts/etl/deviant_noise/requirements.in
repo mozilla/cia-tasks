@@ -3,3 +3,4 @@ scipy
 pymysql
 requests
 hjson
+taskcluster
