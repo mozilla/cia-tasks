@@ -3,6 +3,9 @@
     "schema": "treeherder",
     "debug": false
   },
+  "taskcluster": {
+    "rootUrl": {"$ref": "env://TASKCLUSTER_PROXY_URL"}
+  },
   "destination": {
     "account_info": {
       "type": "service_account",
