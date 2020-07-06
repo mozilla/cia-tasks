@@ -9,7 +9,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-import taskcluster
+
 
 from jx_bigquery import bigquery
 from jx_bigquery.sql import quote_column, quote_value
@@ -44,14 +44,16 @@ def inject_secrets(config):
     ** TASKCLUSTER_ROOT_URL = https://community-tc.services.mozilla.com
     ************************************************************************
     """
-    with Timer("get secrets"):
-        secrets = taskcluster.Secrets(config.taskcluster)
-        acc = Data()
-        for s in listwrap(SECRET_NAMES):
-            secret_name = concat_field(SECRET_PREFIX, s)
-            Log.note("get secret named {{name|quote}}", name=secret_name)
-            acc[s] = secrets.get(secret_name)["secret"]
-        config |= acc
+    if config.inject_secrets != False:
+        with Timer("get secrets"):
+            import taskcluster
+            secrets = taskcluster.Secrets(config.taskcluster)
+            acc = Data()
+            for s in listwrap(SECRET_NAMES):
+                secret_name = concat_field(SECRET_PREFIX, s)
+                Log.note("get secret named {{name|quote}}", name=secret_name)
+                acc[s] = secrets.get(secret_name)["secret"]
+            config |= acc
 
 
 def main(config):

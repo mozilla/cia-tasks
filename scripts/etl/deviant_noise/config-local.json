@@ -1,4 +1,5 @@
 {
+  "inject_secrets": false,
   "source": {
     "schema": "treeherder",
     "username": "activedata2",
@@ -38,7 +39,8 @@
     "sharded": true
   },
   "constants": {
-    "jx_bigquery.bigquery.DEBUG": true
+    "jx_bigquery.bigquery.DEBUG": true,
+    "mo_http.http.default_headers": {"Referer": "https://github.com/mozilla/cia-tasks/tree/deviant-noise/scripts/etl/deviant_noise"}
   },
   "debug": {
     "trace": true

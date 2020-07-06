@@ -1,8 +1,7 @@
 {
   "source": {
-    "account_info": {"$ref": "#destination.account_info"},
-    "dataset": "treeherder-prod",
-    "table": "perf"
+    "schema": "treeherder",
+    "debug": false
   },
   "destination": {
     "account_info": {
@@ -41,7 +40,8 @@
     "sharded": true
   },
   "constants": {
-    "jx_bigquery.bigquery.DEBUG": true
+    "jx_bigquery.bigquery.DEBUG": true,
+    "mo_http.http.default_headers": {"Referer": "https://github.com/mozilla/cia-tasks/tree/deviant-noise/scripts/etl/deviant_noise"}
   },
   "debug": {
     "trace": true
