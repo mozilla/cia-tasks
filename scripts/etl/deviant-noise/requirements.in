@@ -4,3 +4,4 @@ pymysql
 requests
 hjson
 taskcluster
+google-cloud-bigquery
