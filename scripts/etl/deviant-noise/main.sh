@@ -1,7 +1,7 @@
 
 # MEANT FOR TASK CLUSTER
 
-cd /cia-tasks/scripts/etl/deviant_noise
+cd /cia-tasks/scripts/etl/deviant-noise
 pip3 --version
 pip3 install pip-tools
 pip-compile --upgrade --generate-hashes --output-file requirements.txt requirements.in
