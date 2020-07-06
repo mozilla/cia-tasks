@@ -25,7 +25,7 @@ NUM_THREADS = 5
 LOOK_BACK = 3 * MONTH
 MAX_RUNTIME = "50minute"  # STOP PROCESSING AFTER THIS GIVEN TIME
 STALE = 3 * DAY  # DO NOT UPDATE DATA THAT IS NOT STALE
-SECRET_PREFIX = "project/cia/deviant_noise"
+SECRET_PREFIX = "project/cia/deviant-noise"
 SECRET_NAMES = [
     "destination.account_info",
     "source"

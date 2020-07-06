@@ -10,3 +10,4 @@ __pycache__
 /deviant-noise/*.iml
 /scripts/etl/deviant_noise/requirements.txt
 .idea
+/scripts/etl/deviant-noise/requirements.txt
