@@ -14,10 +14,30 @@ from copy import copy
 
 from google.cloud import bigquery
 from google.oauth2 import service_account
+
 from jx_base import Container, Facts
+from jx_bigquery import snowflakes
+from jx_bigquery.snowflakes import Snowflake
+from jx_bigquery.sql import (
+    quote_column,
+    ALLOWED,
+    sql_call,
+    sql_alias,
+    escape_name,
+    ApiName,
+    sql_query,
+)
+from jx_bigquery.typed_encoder import (
+    NESTED_TYPE,
+    typed_encode,
+    REPEATED,
+    json_type_to_bq_type,
+    INTEGER_TYPE,
+    untyped,
+)
 from jx_python import jx
 from mo_dots import listwrap, unwrap, join_field, Null, is_data, Data, wrap, set_default
-from mo_future import is_text, text, first, decorate
+from mo_future import is_text, text, first
 from mo_json import INTEGER
 from mo_kwargs import override
 from mo_logs import Log, Except
@@ -38,29 +58,9 @@ from mo_sql import (
     SQL_DESC,
     SQL_UNION_ALL,
 )
-from mo_threads import Till, Lock, Signal, Queue
+from mo_threads import Till, Lock, Queue
 from mo_times import MINUTE, Timer
 from mo_times.dates import Date
-
-from jx_bigquery import snowflakes
-from jx_bigquery.snowflakes import Snowflake
-from jx_bigquery.sql import (
-    quote_column,
-    ALLOWED,
-    sql_call,
-    sql_alias,
-    escape_name,
-    ApiName,
-    sql_query,
-)
-from jx_bigquery.typed_encoder import (
-    NESTED_TYPE,
-    typed_encode,
-    REPEATED,
-    json_type_to_bq_type,
-    INTEGER_TYPE,
-    untyped,
-)
 
 DEBUG = False
 EXTEND_LIMIT = 2 * MINUTE  # EMIT ERROR IF ADDING RECORDS TO TABLE TOO OFTEN
@@ -431,7 +431,7 @@ class Table(Facts):
                 Log.note(
                     "added new shard with name: {{shard}}", shard=self.shard.table_id
                 )
-            with Timer("insert {{num}} rows to bq", param={"num": len(rows)}):
+            with Timer("insert {{num}} rows to bq", param={"num": len(rows)}, verbose=DEBUG):
                 failures = self.container.client.insert_rows_json(
                     self.shard,
                     json_rows=output,
