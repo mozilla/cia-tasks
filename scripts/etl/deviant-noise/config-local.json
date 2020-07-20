@@ -40,6 +40,7 @@
   },
   "constants": {
     "jx_bigquery.bigquery.DEBUG": true,
+    "measure_noise.analysis_etl.LIMIT": 10000,
     "mo_http.http.default_headers": {"Referer": "https://github.com/mozilla/cia-tasks/tree/deviant-noise/scripts/etl/deviant_noise"}
   },
   "debug": {

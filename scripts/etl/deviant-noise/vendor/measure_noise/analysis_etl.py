@@ -10,27 +10,26 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import numpy as np
+from mo_math.randoms import Random
 
 import mo_math
 from jx_python import jx
 from measure_noise import deviance
 from measure_noise.extract_perf import get_signature, get_dataum
 from measure_noise.step_detector import find_segments
-from mo_dots import (
-    Data)
+from mo_dots import Data, coalesce
 from mo_json import NUMBER, python_type_to_json_type, scrub
 from mo_logs import Log
 from mo_times import Timer, Date
+
+LIMIT = 10000
 
 # REGISTER float64
 python_type_to_json_type[np.float64] = NUMBER
 
 
 def process(
-    signature_hash,
-    since,
-    source,
-    destination,
+    signature_hash, since, source, destination,
 ):
     """
     :param signature_hash: The performance hash
@@ -52,18 +51,18 @@ def process(
 
     values = list(pushes.value)
     title = "-".join(
-        map(
-            str,
-            [
-                sig.framework,
-                sig.suite,
-                sig.test,
-                sig.platform,
-                sig.repository,
-            ],
-        )
+        map(str, [sig.framework, sig.suite, sig.test, sig.platform, sig.repository,],)
     )
     Log.note("With {{title}}", title=title)
+
+    if len(values) > LIMIT:
+        Log.alert(
+            "Too many values for {{title}} ({{num}}), choosing last {{limit}}",
+            title=title,
+            num=len(values),
+            limit=LIMIT,
+        )
+        values = values[-LIMIT:]
 
     with Timer("find segments"):
         new_segments, new_diffs = find_segments(
@@ -102,7 +101,7 @@ def process(
             deviance=(overall_dev_status, overall_dev_score),
             std=relative_noise,
             pushes=len(values),
-            num_segments=len(new_segments)-1
+            num_segments=len(new_segments) - 1,
         )
 
     destination.add(
@@ -110,7 +109,7 @@ def process(
             id=signature_hash,
             title=title,
             num_pushes=len(values),
-            num_segments=len(new_segments)-1,
+            num_segments=len(new_segments) - 1,
             relative_noise=relative_noise,
             overall_dev_status=overall_dev_status,
             overall_dev_score=overall_dev_score,
@@ -120,9 +119,6 @@ def process(
             last_dev_score=last_dev_score,
             last_updated=Date.now(),
             values=values,
-        ) | scrub(sig)
+        )
+        | scrub(sig)
     )
-
-
-
-
