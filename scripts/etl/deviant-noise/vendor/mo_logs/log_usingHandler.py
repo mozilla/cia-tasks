@@ -13,15 +13,15 @@ from __future__ import absolute_import, division, unicode_literals
 
 import logging
 
-from mo_dots import unwrap
+from mo_logs.strings import expand_template
+
+from mo_dots import unwrap, Null
 from mo_logs import Log
 from mo_logs.exceptions import suppress_exception
 from mo_logs.log_usingNothing import StructuredLogger
 from mo_logs.log_usingThreadedStream import StructuredLogger_usingThreadedStream, time_delta_pusher
 
-_THREAD_STOP = None
-_Queue = None
-_Thread = None
+_THREAD_STOP, _Queue, _Thread = [Null] * 3  # IMPORTS
 
 
 def _late_import():
@@ -47,29 +47,12 @@ class StructuredLogger_usingHandler(StructuredLogger):
         self.logger = logging.Logger("unique name", level=logging.INFO)
         self.logger.addHandler(make_log_from_settings(settings))
 
-        # TURNS OUT LOGGERS ARE REALLY SLOW TOO
-        self.queue = _Queue("queue for classic logger", max=10000, silent=True)
-        self.thread = _Thread(
-            "pushing to classic logger",
-            time_delta_pusher,
-            appender=self.logger.info,
-            queue=self.queue,
-            interval=0.3
-        )
-        self.thread.parent.remove_child(self.thread)  # LOGGING WILL BE RESPONSIBLE FOR THREAD stop()
-        self.thread.start()
-
     def write(self, template, params):
-        # http://docs.python.org/2/library/logging.html# logging.LogRecord
-        self.queue.add({"template": template, "params": params})
+        expanded = expand_template(template, params)
+        self.logger.info(expanded)
 
     def stop(self):
-        with suppress_exception:
-            self.queue.add(_THREAD_STOP)  # BE PATIENT, LET REST OF MESSAGE BE SENT
-            self.thread.join()
-
-        with suppress_exception:
-            self.queue.close()
+        self.logger.shutdown()
 
 
 def make_log_from_settings(settings):
@@ -104,4 +87,3 @@ def make_log_from_settings(settings):
     params = unwrap(settings)
     log_instance = constructor(**params)
     return log_instance
-

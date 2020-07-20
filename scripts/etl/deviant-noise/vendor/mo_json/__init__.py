@@ -15,10 +15,11 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from hjson import loads as hjson2value
+from mo_logs.exceptions import get_stacktrace
 
 from mo_dots import Data, FlatList, Null, NullType, SLOT, is_data, to_data, leaves_to_data
 from mo_dots.objects import DataObject
-from mo_future import PY2, integer_types, is_binary, is_text, items, long, none_type, text
+from mo_future import PY2, integer_types, is_binary, is_text, items, long, none_type, text, PY3
 from mo_logs import Except, Log, strings
 from mo_logs.strings import expand_template
 from mo_times import Date, Duration
@@ -138,6 +139,14 @@ def trim_whitespace(value):
         return None
 
 
+def is_number(s):
+    try:
+        s = float(s)
+        return not math.isnan(s)
+    except Exception:
+        return False
+
+
 def scrub(value, scrub_text=_keep_whitespace, scrub_number=_scrub_number):
     """
     REMOVE/REPLACE VALUES THAT CAN NOT BE JSON-IZED
@@ -148,7 +157,7 @@ def scrub(value, scrub_text=_keep_whitespace, scrub_number=_scrub_number):
 def _scrub(value, is_done, stack, scrub_text, scrub_number):
     if FIND_LOOPS:
         _id = id(value)
-        if _id in stack:
+        if _id in stack and type(_id).__name__ not in ["int"]:
             Log.error("loop in JSON")
         stack = stack + [_id]
     type_ = value.__class__
@@ -192,8 +201,6 @@ def _scrub(value, is_done, stack, scrub_text, scrub_number):
                 pass
             elif is_binary(k):
                 k = k.decode('utf8')
-            # elif hasattr(k, "__unicode__"):
-            #     k = text(k)
             else:
                 Log.error("keys must be strings")
             v = _scrub(v, is_done, stack, scrub_text, scrub_number)
@@ -207,7 +214,7 @@ def _scrub(value, is_done, stack, scrub_text, scrub_number):
         for v in value:
             v = _scrub(v, is_done, stack, scrub_text, scrub_number)
             output.append(v)
-        return output # if output else None
+        return output  # if output else None
     elif type_ is type:
         return value.__name__
     elif type_.__name__ == "bool_":  # DEAR ME!  Numpy has it's own booleans (value==False could be used, but 0==False in Python.  DOH!)
@@ -232,6 +239,9 @@ def _scrub(value, is_done, stack, scrub_text, scrub_number):
         return output
     elif hasattr(value, '__call__'):
         return text(repr(value))
+    elif is_number(value):
+        # for numpy values
+        return scrub_number(value)
     else:
         return _scrub(DataObject(value), is_done, stack, scrub_text, scrub_number)
 
@@ -245,7 +255,7 @@ def value2json(obj, pretty=False, sort_keys=False, keep_whitespace=True):
     :return:
     """
     if FIND_LOOPS:
-        obj = scrub(obj, scrub_text=_keep_whitespace if keep_whitespace else trim_whitespace())
+        obj = scrub(obj, scrub_text=_keep_whitespace if keep_whitespace else trim_whitespace)
     try:
         json = json_encoder(obj, pretty=pretty)
         if json == None:
@@ -286,6 +296,46 @@ def remove_line_comment(line):
         elif c == "/" and mode == 0 and line[i + 1] == "/":
             return line[0:i]
     return line
+
+
+def check_depth(json, limit=30):
+    """
+    THROW ERROR IF JSON IS TOO DEEP
+    :param json:  THE JSON STRING TO CHECK
+    :param limit:  EXIST EARLY IF TOO DEEP
+    """
+    l = len(json)
+    expecting = ["{"] * limit
+    e = -1
+    i = 0
+    while i < l:
+        c = json[i]
+        if c == '"':
+            i += 1
+            while True:
+                c = json[i]
+                if c == "\\" and json[i + 1] == '"':
+                    i += 2
+                    continue
+                i += 1
+                if c == '"':
+                    break
+        elif c == "{":
+            e += 1
+            expecting[e] = "}"
+            i += 1
+        elif c == "[":
+            e += 1
+            expecting[e] = "]"
+            i += 1
+        elif c in "]}":
+            if expecting[e] == c:
+                e -= 1
+            else:
+                Log.error("invalid JSON")
+            i += 1
+        else:
+            i += 1
 
 
 def json2value(json_string, params=Null, flexible=False, leaves=False):
@@ -349,31 +399,41 @@ def json2value(json_string, params=Null, flexible=False, leaves=False):
             char_str = " "
         Log.error(CAN_NOT_DECODE_JSON + ":\n{{char_str}}\n{{hexx_str}}\n", char_str=char_str, hexx_str=hexx_str, cause=e)
 
-if PY2:
-    def bytes2hex(value, separator=" "):
-        return separator.join('{:02X}'.format(ord(x)) for x in value)
-else:
+if PY3:
     def bytes2hex(value, separator=" "):
         return separator.join('{:02X}'.format(x) for x in value)
+else:
+    def bytes2hex(value, separator=" "):
+        return separator.join('{:02X}'.format(ord(x)) for x in value)
 
 
-def datetime2unix(d):
+if PY3:
+    from datetime import timezone
+    DATETIME_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+else:
+    DATETIME_EPOCH = datetime(1970, 1, 1)
+DATE_EPOCH = date(1970, 1, 1)
+
+
+def datetime2unix(value):
     try:
-        if d == None:
+        if value == None:
             return None
-        elif isinstance(d, datetime):
-            epoch = datetime(1970, 1, 1)
-        elif isinstance(d, date):
-            epoch = date(1970, 1, 1)
+        elif isinstance(value, datetime):
+            if value.tzinfo:
+                diff = value - DATETIME_EPOCH
+            else:
+                diff = value - DATETIME_EPOCH.replace(tzinfo=None)
+            return diff.total_seconds()
+        elif isinstance(value, date):
+            diff = value - DATE_EPOCH
+            return diff.total_seconds()
         else:
-            Log.error("Can not convert {{value}} of type {{type}}",  value= d,  type= d.__class__)
-
-        diff = d - epoch
-        return float(diff.total_seconds())
+            from mo_logs import Log
+            Log.error("Can not convert {{value}} of type {{type}}", value=value, type=value.__class__)
     except Exception as e:
-        Log.error("Can not convert {{value}}",  value= d, cause=e)
-
-
+        from mo_logs import Log
+        Log.error("Can not convert {{value}}", value=value, cause=e)
 
 python_type_to_json_type = {
     int: INTEGER,

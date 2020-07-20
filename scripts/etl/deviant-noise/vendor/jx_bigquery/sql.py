@@ -13,34 +13,14 @@ from collections import Mapping
 
 from jx_base.query import _normalize_sort, _normalize_select
 from jx_python import jx
-from mo_dots import wrap, split_field, Null
+from mo_dots import wrap, split_field
 from mo_files.url import hex2chr
-from mo_future import text, first, is_text
-from mo_logs import Log
-from mo_sql import (
-    SQL,
-    SQL_FALSE,
-    SQL_NULL,
-    SQL_SELECT,
-    SQL_TRUE,
-    sql_iso,
-    sql_list,
-    SQL_AND,
-    ConcatSQL,
-    SQL_EQ,
-    SQL_IS_NULL,
-    SQL_COMMA,
-    JoinSQL,
-    SQL_FROM,
-    SQL_WHERE,
-    SQL_ORDERBY,
-    SQL_LT,
-    SQL_AS,
-    SQL_ASC,
-    SQL_DESC,
-    SQL_LIMIT, SQL_STAR)
+from mo_future import text, first
+from mo_sql import *
 from mo_times import Date, Duration
 
+SQL_TRUE = SQL(" TRUE ")
+SQL_FALSE = SQL(" FALSE ")
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 ALLOWED = string.ascii_letters + string.digits
 GUID = "_id"  # user accessible, unique value across many machines
@@ -196,7 +176,7 @@ def sql_lt(**item):
     return ConcatSQL(quote_column(k), SQL_LT, quote_value(v))
 
 
-def sql_query(query, schema=Null):
+def sql_query(query, schema=None):
     """
     VERY BASIC QUERY EXPRESSION TO SQL
     :param query: jx-expression
@@ -211,13 +191,14 @@ def sql_query(query, schema=Null):
     if not query.select:
         acc.append(SQL_STAR)
     else:
-        # COMPLICATED
-        select = _normalize_select(query.select, query['from'], schema)
+        select = _normalize_select(query.select, query["from"], schema)
         acc.append(
             JoinSQL(
                 SQL_COMMA,
                 [
-                    sql_alias(BQLang[jx_expression(s.value)].to_bq(schema), escape_name(s.name))
+                    sql_alias(
+                        BQLang[jx_expression(s.value)].to_bq(schema), escape_name(s.name)
+                    )
                     for s in select
                 ],
             )
