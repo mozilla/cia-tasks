@@ -10,19 +10,18 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import numpy as np
-from mo_math.randoms import Random
 
 import mo_math
 from jx_python import jx
 from measure_noise import deviance
 from measure_noise.extract_perf import get_signature, get_dataum
 from measure_noise.step_detector import find_segments
-from mo_dots import Data, coalesce
+from mo_dots import Data
 from mo_json import NUMBER, python_type_to_json_type, scrub
 from mo_logs import Log
 from mo_times import Timer, Date
 
-LIMIT = 10000
+LIMIT = 5000
 
 # REGISTER float64
 python_type_to_json_type[np.float64] = NUMBER
@@ -47,7 +46,7 @@ def process(
     sig = get_signature(source, signature_hash)
 
     # GET SIGNATURE DETAILS
-    pushes = get_dataum(source, signature_hash, since)
+    pushes = get_dataum(source, signature_hash, since, LIMIT)
 
     values = list(pushes.value)
     title = "-".join(
@@ -57,7 +56,7 @@ def process(
 
     if len(values) > LIMIT:
         Log.alert(
-            "Too many values for {{title}} ({{num}}), choosing last {{limit}}",
+            "Too many values for {{title}} ({at least {num}}), choosing last {{limit}}",
             title=title,
             num=len(values),
             limit=LIMIT,

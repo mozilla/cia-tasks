@@ -78,7 +78,7 @@ signature_sql = """
 """
 
 
-def get_dataum(db_config, signature_id, since):
+def get_dataum(db_config, signature_id, since, limit):
     db = MySQL(db_config)
     with db:
         return db.query(
@@ -139,6 +139,8 @@ def get_dataum(db_config, signature_id, since):
             sig.signature_hash in {quote_list(listwrap(signature_id))}
         ORDER BY
             p.time DESC
+        LIMIT
+            {quote_value(limit)} + 1
         """
             )
         )
