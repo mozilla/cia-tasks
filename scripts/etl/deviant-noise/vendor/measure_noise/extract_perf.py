@@ -140,7 +140,7 @@ def get_dataum(db_config, signature_id, since, limit):
         ORDER BY
             p.time DESC
         LIMIT
-            {quote_value(limit)} + 1
+            {quote_value(limit + 1)}
         """
             )
         )
