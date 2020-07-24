@@ -9,6 +9,7 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
+import sys
 from functools import update_wrapper
 
 from mo_dots import get_logger, is_data, to_data
@@ -103,6 +104,11 @@ def override(kwargs=None):
                 try:
                     return func(*a, **k)
                 except TypeError as e:
+                    tb = getattr(e, '__traceback__', None)
+                    if tb is not None:
+                        trace = _parse_traceback(tb)
+                    else:
+                        trace = get_traceback(0)
                     raise_error(e, a, k)
 
             return update_wrapper(w_bound_method, func)
@@ -167,3 +173,30 @@ def override(kwargs=None):
         # SIMPLE VERSION @override
         func, kwargs = kwargs, KWARGS
         return output(func)
+
+
+def get_traceback(start):
+    """
+    SNAGGED FROM traceback.py
+
+    RETURN list OF dicts DESCRIBING THE STACK TRACE
+    """
+    tb = sys.exc_info()[2]
+    for i in range(start):
+        tb = tb.tb_next
+    return _parse_traceback(tb)
+
+
+def _parse_traceback(tb):
+    trace = []
+    while tb is not None:
+        f = tb.tb_frame
+        trace.append({
+            "file": f.f_code.co_filename,
+            "line": tb.tb_lineno,
+            "method": f.f_code.co_name
+        })
+        tb = tb.tb_next
+    trace.reverse()
+    return trace
+

@@ -11,11 +11,12 @@
 
 from __future__ import absolute_import, division, unicode_literals
 
-from time import sleep
-
-from mo_logs import Except, Log, suppress_exception
+from mo_imports import expect
+from mo_logs import Except, Log
 from mo_logs.log_usingNothing import StructuredLogger
 from mo_threads import Queue, THREAD_STOP, Thread, Till
+
+Log, = expect("Log")
 
 DEBUG = False
 PERIOD = 0.3

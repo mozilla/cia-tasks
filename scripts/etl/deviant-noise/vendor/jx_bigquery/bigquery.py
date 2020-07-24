@@ -14,35 +14,30 @@ from copy import copy
 
 from google.cloud import bigquery
 from google.oauth2 import service_account
-
 from jx_base import Container as BaseContainer, Facts as BaseFacts
+from mo_dots import (
+    listwrap,
+    unwrap,
+    join_field,
+    Null,
+    is_data,
+    Data,
+    set_default,
+    dict_to_data,
+    leaves_to_data,
+    from_data,
+)
+from mo_json import INTEGER
+from mo_kwargs import override
+from mo_logs import Except
+from mo_math import ceiling
+from mo_math.randoms import Random
+from mo_threads import Till, Lock, Queue
+from mo_times import MINUTE, Timer
+
 from jx_bigquery import snowflakes
 from jx_bigquery.snowflakes import Snowflake
-from jx_bigquery.sql import (
-    ConcatSQL,
-    SQL,
-    SQL_SELECT,
-    JoinSQL,
-    SQL_NULL,
-    SQL_FROM,
-    SQL_COMMA,
-    SQL_AS,
-    SQL_ORDERBY,
-    SQL_CR,
-    SQL_SELECT_AS_STRUCT,
-    SQL_INSERT,
-    SQL_DESC,
-    SQL_UNION_ALL,
-)
-from jx_bigquery.sql import (
-    quote_column,
-    ALLOWED,
-    sql_call,
-    sql_alias,
-    escape_name,
-    ApiName,
-    sql_query,
-)
+from jx_bigquery.sql import *
 from jx_bigquery.typed_encoder import (
     NESTED_TYPE,
     typed_encode,
@@ -51,18 +46,6 @@ from jx_bigquery.typed_encoder import (
     INTEGER_TYPE,
     untyped,
 )
-from jx_python import jx
-from mo_dots import listwrap, unwrap, join_field, Null, is_data, Data, wrap, set_default, dict_to_data, leaves_to_data, \
-    from_data
-from mo_future import is_text, text, first
-from mo_json import INTEGER
-from mo_kwargs import override
-from mo_logs import Log, Except
-from mo_math import ceiling
-from mo_math.randoms import Random
-from mo_threads import Till, Lock, Queue
-from mo_times import MINUTE, Timer
-from mo_times.dates import Date
 
 DEBUG = False
 EXTEND_LIMIT = 2 * MINUTE  # EMIT ERROR IF ADDING RECORDS TO TABLE TOO OFTEN
@@ -359,13 +342,17 @@ class Table(BaseFacts):
         return self.sql_query(sql_query({"from": text(self.full_name)}, self.schema))
 
     def jx_query(self, jx_query):
-        docs = self.sql_query(sql_query(dict_to_data({"from": text(self.full_name)}) | jx_query, self.schema))
+        docs = self.sql_query(
+            sql_query(
+                dict_to_data({"from": text(self.full_name)}) | jx_query, self.schema
+            )
+        )
         data = []
         for d in docs:
             u = untyped(from_data(leaves_to_data(d)))
             data.append(u)
 
-        return Data(data=data, format='list')
+        return Data(data=data, format="list")
 
     @property
     def schema(self):
@@ -453,7 +440,9 @@ class Table(BaseFacts):
                 DEBUG and Log.note(
                     "added new shard with name: {{shard}}", shard=self.shard.table_id
                 )
-            with Timer("insert {{num}} rows to bq", param={"num": len(rows)}, verbose=DEBUG):
+            with Timer(
+                "insert {{num}} rows to bq", param={"num": len(rows)}, verbose=DEBUG
+            ):
                 failures = self.container.client.insert_rows_json(
                     self.shard,
                     json_rows=typed_rows,
@@ -485,26 +474,40 @@ class Table(BaseFacts):
                 Log.error(
                     "big query complains about:\n{{data|json}}",
                     data=typed_rows,
-                    cause=cause
+                    cause=cause,
                 )
             elif len(rows) > 1 and (
                 "Request payload size exceeds the limit" in cause
-                or "An existing connection was forcibly closed by the remote host" in cause
+                or "An existing connection was forcibly closed by the remote host"
+                in cause
                 or "Your client has issued a malformed or illegal request." in cause
                 or "BrokenPipeError(32, 'Broken pipe')" in cause
                 or "ConnectionResetError(104, 'Connection reset by peer')" in cause
             ):
-                Log.warning("problem with batch of size {{size}}", size=len(rows), cause=cause)
+                Log.warning(
+                    "problem with batch of size {{size}}", size=len(rows), cause=cause
+                )
                 batch_size = ceiling(len(rows) / 10)
                 try:
-                    DEBUG and Log.note("attempt smaller batches of size {{batch_size}}", batch_size=batch_size)
+                    DEBUG and Log.note(
+                        "attempt smaller batches of size {{batch_size}}",
+                        batch_size=batch_size,
+                    )
                     for _, chunk in jx.chunk(rows, batch_size):
                         self._extend(chunk)
                     return
                 except Exception as cause2:
-                    Log.error("smaller batches of size {{batch_size}} did not work", batch_size=batch_size, cause=cause2)
+                    Log.error(
+                        "smaller batches of size {{batch_size}} did not work",
+                        batch_size=batch_size,
+                        cause=cause2,
+                    )
             elif len(rows) == 1:
-                Log.error("Could not insert document\n{{doc|json|indent}}", doc=rows[0], cause=cause)
+                Log.error(
+                    "Could not insert document\n{{doc|json|indent}}",
+                    doc=rows[0],
+                    cause=cause,
+                )
             else:
                 Log.error("Do not know how to handle", cause=cause)
 
@@ -588,7 +591,9 @@ class Table(BaseFacts):
             )
             selects.append(q)
 
-        DEBUG and Log.note("inserting into table {{table}}", table=text(primary_shard_name))
+        DEBUG and Log.note(
+            "inserting into table {{table}}", table=text(primary_shard_name)
+        )
         matched = []
         unmatched = []
         for sel, shard, flake in zip(selects, shards, shard_flakes):
@@ -608,9 +613,12 @@ class Table(BaseFacts):
                         (
                             sql_query(
                                 {
-                                    "from": text(self.container.full_name + ApiName(shard.table_id))
+                                    "from": text(
+                                        self.container.full_name
+                                        + ApiName(shard.table_id)
+                                    )
                                 },
-                                schema
+                                schema,
                             )
                             for _, shard, schema in merge_chunk
                         ),
@@ -618,7 +626,9 @@ class Table(BaseFacts):
                 )
                 DEBUG and Log.note("{{sql}}", sql=text(command))
                 job = self.container.query_and_wait(command)
-                DEBUG and Log.note("job {{id}} state = {{state}}", id=job.job_id, state=job.state)
+                DEBUG and Log.note(
+                    "job {{id}} state = {{state}}", id=job.job_id, state=job.state
+                )
 
                 if job.errors:
                     Log.error(

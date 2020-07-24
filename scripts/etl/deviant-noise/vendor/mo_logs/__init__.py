@@ -15,17 +15,17 @@ import sys
 from datetime import datetime
 
 from mo_dots import Data, FlatList, coalesce, is_list, listwrap, unwraplist, dict_to_data, is_data
-from mo_future import PY3, is_text, text
+from mo_future import PY3, is_text, text, STDOUT
+from mo_imports import export
 from mo_kwargs import override
 from mo_logs import constants as _constants, exceptions, strings, startup
 from mo_logs.exceptions import Except, LogItem, suppress_exception
+from mo_logs.log_usingFile import StructuredLogger_usingFile
+from mo_logs.log_usingMulti import StructuredLogger_usingMulti
+from mo_logs.log_usingStream import StructuredLogger_usingStream
 from mo_logs.strings import CR, indent
 
 _Thread = None
-if PY3:
-    STDOUT = sys.stdout.buffer
-else:
-    STDOUT = sys.stdout
 
 
 class Log(object):
@@ -364,7 +364,7 @@ class Log(object):
         stack_depth
     ):
         """
-        :param itemt:  A LogItemTHE TYPE OF MESSAGE
+        :param item:  A LogItem THE TYPE OF MESSAGE
         :param stack_depth: FOR TRACKING WHAT LINE THIS CAME FROM
         :return:
         """
@@ -407,6 +407,7 @@ class LoggingContext:
 
     def __enter__(self):
         self.config = config = startup.read_settings()
+        from mo_logs import constants
         constants.set(config.constants)
         Log.start(config.debug)
         return config
@@ -437,14 +438,10 @@ def raise_from_none(e):
 if PY3:
     exec("def raise_from_none(e):\n    raise e from None\n", globals(), locals())
 
-from mo_logs import startup
-from mo_logs.log_usingFile import StructuredLogger_usingFile
-from mo_logs.log_usingMulti import StructuredLogger_usingMulti
-from mo_logs.log_usingStream import StructuredLogger_usingStream
-
-# EXPORT
-startup.Log = Log
-
+export("mo_logs.startup", Log)
+export("mo_logs.log_usingFile", Log)
+export("mo_logs.log_usingMulti", Log)
+export("mo_logs.log_usingThread", Log)
 
 if not Log.main_log:
     Log.main_log = StructuredLogger_usingStream(STDOUT)

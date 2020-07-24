@@ -13,29 +13,12 @@ from __future__ import absolute_import, division, unicode_literals
 
 import logging
 
-from mo_logs.strings import expand_template
+from mo_logs.log_usingThreadedStream import StructuredLogger_usingThreadedStream
 
 from mo_dots import unwrap, Null
 from mo_logs import Log
-from mo_logs.exceptions import suppress_exception
 from mo_logs.log_usingNothing import StructuredLogger
-from mo_logs.log_usingThreadedStream import StructuredLogger_usingThreadedStream, time_delta_pusher
-
-_THREAD_STOP, _Queue, _Thread = [Null] * 3  # IMPORTS
-
-
-def _late_import():
-    global _THREAD_STOP
-    global _Queue
-    global _Thread
-
-    from mo_threads import THREAD_STOP as _THREAD_STOP
-    from mo_threads import Queue as _Queue
-    from mo_threads import Thread as _Thread
-
-    _ = _THREAD_STOP
-    _ = _Queue
-    _ = _Thread
+from mo_logs.strings import expand_template
 
 
 # WRAP PYTHON CLASSIC logger OBJECTS
@@ -87,3 +70,20 @@ def make_log_from_settings(settings):
     params = unwrap(settings)
     log_instance = constructor(**params)
     return log_instance
+
+
+_THREAD_STOP, _Queue, _Thread = [Null] * 3  # IMPORTS
+
+
+def _late_import():
+    global _THREAD_STOP
+    global _Queue
+    global _Thread
+
+    from mo_threads import THREAD_STOP as _THREAD_STOP
+    from mo_threads import Queue as _Queue
+    from mo_threads import Thread as _Thread
+
+    _ = _THREAD_STOP
+    _ = _Queue
+    _ = _Thread

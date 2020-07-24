@@ -21,6 +21,7 @@ from mo_times import Date, Duration
 
 SQL_TRUE = SQL(" TRUE ")
 SQL_FALSE = SQL(" FALSE ")
+SQL_FLOAT64 = SQL(" FLOAT64 ")
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 ALLOWED = string.ascii_letters + string.digits
 GUID = "_id"  # user accessible, unique value across many machines
