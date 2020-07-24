@@ -65,7 +65,7 @@ def get_signature(db_config, signature_id):
                 LEFT JOIN
                     machine_platform AS t5 ON t5.id = t1.platform_id
                 LEFT JOIN
-                    repository AS t6 ON t6.id = t1.repository_id
+                   repository AS t6 ON t6.id = t1.repository_id
                 WHERE
                     t1.id in {quote_list(listwrap(signature_id))}
                 ORDER BY 
@@ -132,7 +132,7 @@ def get_dataum(db_config, signature_id, since, limit):
             a.manually_created=0
         WHERE
             p.time > {quote_value(since)} AND
-            sig.id in {quote_list(listwrap(signature_id))}
+            d.signature_id in {quote_list(listwrap(signature_id))}
         ORDER BY
             p.time DESC
         LIMIT

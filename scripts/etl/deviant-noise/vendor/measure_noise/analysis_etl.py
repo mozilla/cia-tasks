@@ -15,9 +15,10 @@ from jx_python import jx
 from measure_noise import deviance
 from measure_noise.extract_perf import get_signature, get_dataum
 from measure_noise.step_detector import find_segments
-from mo_dots import Data
+from mo_dots import Data, unwrap
 from mo_json import NUMBER, python_type_to_json_type, scrub
 from mo_logs import Log
+from mo_math.stats import median
 from mo_times import Timer, Date
 
 LIMIT = 5000
@@ -46,6 +47,19 @@ def process(
 
     # GET SIGNATURE DETAILS
     pushes = get_dataum(source, sig_id, since, LIMIT)
+
+    pushes = jx.sort(
+        [
+            {
+                "value": median(rows.value),
+                "runs": rows,
+                "push": {"time": unwrap(t)["push.time"]},
+            }
+            for t, rows in jx.groupby(pushes, "push.time")
+            if t["push\\.time"] > since
+        ],
+        "push.time",
+    )
 
     values = list(pushes.value)
     title = "-".join(
