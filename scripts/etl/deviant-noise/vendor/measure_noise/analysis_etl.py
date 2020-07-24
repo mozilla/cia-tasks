@@ -28,10 +28,10 @@ python_type_to_json_type[np.float64] = NUMBER
 
 
 def process(
-    signature_hash, since, source, destination,
+    sig_id, since, source, destination,
 ):
     """
-    :param signature_hash: The performance hash
+    :param sig_id: The performance hash
     :param since: Only data after this date
     :param show:
     :param show_limit:
@@ -39,14 +39,14 @@ def process(
     :param show_distribution:
     :return:
     """
-    if not mo_math.is_hex(signature_hash):
-        Log.error("expecting hexidecimal hash")
+    if not isinstance(sig_id, int):
+        Log.error("expecting id")
 
     # GET SIGNATURE DETAILS
-    sig = get_signature(source, signature_hash)
+    sig = get_signature(source, sig_id)
 
     # GET SIGNATURE DETAILS
-    pushes = get_dataum(source, signature_hash, since, LIMIT)
+    pushes = get_dataum(source, sig_id, since, LIMIT)
 
     values = list(pushes.value)
     title = "-".join(
@@ -105,7 +105,7 @@ def process(
 
     destination.add(
         Data(
-            id=signature_hash,
+            id=sig_id,
             title=title,
             num_pushes=len(values),
             num_segments=len(new_segments) - 1,

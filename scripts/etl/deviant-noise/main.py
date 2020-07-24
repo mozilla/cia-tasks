@@ -69,15 +69,15 @@ def main(config):
         recently_updated_series = dict_to_data({
             doc['id']: doc
             for doc in t.query(SQL(f"""
-                SELECT MAX(s.signature_hash) id
+                SELECT d.signature_id AS id
                 FROM (            
                     SELECT d.signature_id, d.push_timestamp
                     FROM performance_datum d 
-                    WHERE d.repository_id IN (77, 1)  -- autoland, mozilla-central
+                    WHERE d.repository_id NOT IN (4)  -- try
                     ORDER BY d.id desc
                     LIMIT 1000000
                 ) d
-                LEFT JOIN performance_signature s on s.id= d.signature_id
+                LEFT JOIN performance_signature s on s.id=d.signature_id
                 WHERE s.test IS NULL or s.test='' or s.test=s.suite
                 GROUP BY d.signature_id
                 ORDER BY MAX(d.push_timestamp) DESC

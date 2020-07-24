@@ -23,7 +23,7 @@
     "dataset": "dev-deviant",
     "table": "noise",
     "schema": {
-      "id": "string",
+      "id": "integer",
       "push.id": "integer",
       "push.date": "time",
       "last_updated": "time"
@@ -31,10 +31,6 @@
     "top_level_fields": {
       "id": "id",
       "last_updated": "last_updated"
-    },
-    "partition": {
-      "field": "last_updated",
-      "expire": "1year"
     },
     "id": {
       "field": "id",
