@@ -11,7 +11,6 @@ from __future__ import unicode_literals
 
 import numpy as np
 
-import mo_math
 from jx_python import jx
 from measure_noise import deviance
 from measure_noise.extract_perf import get_signature, get_dataum
