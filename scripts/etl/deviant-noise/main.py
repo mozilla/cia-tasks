@@ -73,7 +73,7 @@ def main(config):
                 FROM (            
                     SELECT d.signature_id, d.push_timestamp
                     FROM performance_datum d 
-                    WHERE d.repository_id NOT IN (77, 1, 2, 6)  -- autoland, mozilla-central, mozilla-inbound, mozilla-beta
+                    WHERE d.repository_id IN (77, 1, 2, 6)  -- autoland, mozilla-central, mozilla-inbound, mozilla-beta
                     ORDER BY d.id desc
                     LIMIT 1000000
                 ) d
