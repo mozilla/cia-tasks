@@ -5,7 +5,13 @@ Schedule some jobs to run and fill BigQuery
 
 ## Coding
 
-### Install 
+Work is proceeding on the `etl-schedulers` branch
+
+    git checkout etl-schedulers
+
+
+
+### Running
 
 Install into virtual machine using the directory of this README as current directory
 
@@ -13,6 +19,10 @@ Install into virtual machine using the directory of this README as current direc
     python -m virtualenv .venv             
     .venv\Scripts\activate
     
+ensure you are on the correct branch
+
+    git checkout etl-schedulers
+
 the moxci has some conflicting requirements, they can be sorted with `pip-tools`    
     
     pip3 install pip-tools
@@ -23,10 +33,4 @@ then you may run the schedulers ETL
 
     export PYTHONPATH=.:vendor
     python3 main.py --config=config-local.json
-    
 
-### Execution
-
-#### Scope for S3 cache
-
-auth:aws-s3:read-write:communitytc-bugbug/data/adr_cache/*

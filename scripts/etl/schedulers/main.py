@@ -118,7 +118,13 @@ class Schedulers:
                     return line[9:].strip()
             return None
 
-    def process_one(self, start, end, branch, please_stop):
+    def process_chunk(self, start, end, branch, please_stop):
+        """
+        :param start: begin time range
+        :param end: end time range
+        :param branch: branch used to find pushes
+        :param please_stop: signal to stop early
+        """
         # ASSUME PREVIOUS WORK IS DONE
         # UPDATE THE DATABASE STATE
         self.done.min = mo_math.min(end, self.done.min)
@@ -232,7 +238,7 @@ class Schedulers:
             for start, end, branch in self.todo:
                 if please_stop:
                     break
-                self.process_one(start, end, branch, please_stop)
+                self.process_chunk(start, end, branch, please_stop)
         except Exception as e:
             Log.warning("Could not complete the etl", cause=e)
         else:
