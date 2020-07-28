@@ -26,10 +26,7 @@ LOOK_BACK = 3 * MONTH
 MAX_RUNTIME = "50minute"  # STOP PROCESSING AFTER THIS GIVEN TIME
 STALE = 3 * DAY  # DO NOT UPDATE DATA THAT IS NOT STALE
 SECRET_PREFIX = "project/cia/deviant-noise"
-SECRET_NAMES = [
-    "destination.account_info",
-    "source"
-]
+SECRET_NAMES = ["destination.account_info", "source"]
 
 
 def inject_secrets(config):
@@ -45,6 +42,7 @@ def inject_secrets(config):
     if config.inject_secrets != False:
         with Timer("get secrets"):
             import taskcluster
+
             secrets = taskcluster.Secrets(config.taskcluster)
             acc = Data()
             for s in listwrap(SECRET_NAMES):
@@ -57,18 +55,23 @@ def inject_secrets(config):
 def main(config):
     outatime = Till(seconds=Duration(MAX_RUNTIME).total_seconds())
     outatime.then(lambda: Log.alert("Out of time, exit early"))
-    since = Date.today()-LOOK_BACK
+    since = Date.today() - LOOK_BACK
 
     # SETUP DESTINATION
-    destination = bigquery.Dataset(config.destination).get_or_create_table(config.destination)
+    destination = bigquery.Dataset(config.destination).get_or_create_table(
+        config.destination
+    )
     # ENSURE SHARDS ARE MERGED
     destination.merge_shards()
 
     # GET ALL KNOWN SERIES
     with MySQL(config.source) as t:
-        recently_updated_series = dict_to_data({
-            doc['id']: doc
-            for doc in t.query(SQL(f"""
+        recently_updated_series = dict_to_data(
+            {
+                doc["id"]: doc
+                for doc in t.query(
+                    SQL(
+                        f"""
                 SELECT d.signature_id AS id
                 FROM (            
                     SELECT d.signature_id, d.push_timestamp
@@ -81,13 +84,19 @@ def main(config):
                 WHERE s.test IS NULL or s.test='' or s.test=s.suite
                 GROUP BY d.signature_id
                 ORDER BY MAX(d.push_timestamp) DESC
-            """))
-        })
+            """
+                    )
+                )
+            }
+        )
 
     # PULL PREVIOUS SERIES
-    recently_scanned = dict_to_data({
-        doc['id']: doc
-        for doc in destination.sql_query(SQL(f"""
+    recently_scanned = dict_to_data(
+        {
+            doc["id"]: doc
+            for doc in destination.sql_query(
+                SQL(
+                    f"""
             SELECT
                 id,
                 MAX(last_updated) as last_processed
@@ -97,18 +106,29 @@ def main(config):
                 id
             HAVING 
                 MAX(last_updated) >= {quote_value(Date.now()-STALE)}
-        """))
-    })
+        """
+                )
+            )
+        }
+    )
 
     todo = [v for k, v in recently_updated_series.items() if k not in recently_scanned]
     todo = jx.reverse(jx.sort(todo, {"last_processed": "desc"})).limit(5000)
     needs_update = todo.get("id")
-    Log.alert("{{num}} series are candidates for update", num=len(needs_update))
+    Log.alert(
+        "{{total}} series have had activity\n"
+        "{{recent}} series have been scanned in past three days\n"
+        "{{num}} series are candidates for update",
+        total=len(recently_updated_series),
+        recent=len(recently_scanned),
+        num=len(needs_update),
+    )
 
     limited_update = Queue("sigs")
     limited_update.extend(needs_update)
 
     with Timer("Updating local database"):
+
         def loop(please_stop):
             while not please_stop:
                 sig_id = limited_update.pop_one()
@@ -118,7 +138,10 @@ def main(config):
                     process(sig_id, since, config.source, destination)
                 except Exception as cause:
                     Log.warning("Could not process {{sig}}", sig=sig_id, cause=cause)
-        threads = [Thread.run(text(i), loop, please_stop=outatime) for i in range(NUM_THREADS)]
+
+        threads = [
+            Thread.run(text(i), loop, please_stop=outatime) for i in range(NUM_THREADS)
+        ]
         for t in threads:
             t.join()
 
@@ -131,5 +154,3 @@ if __name__ == "__main__":
     with Log.start(app_name="etl") as config:
         inject_secrets(config)
         main(config)
-
-
