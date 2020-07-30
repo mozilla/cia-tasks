@@ -11,18 +11,15 @@ from __future__ import unicode_literals
 
 import os
 
-from mo_future import first
+import taskcluster
 
 import adr
-import taskcluster
+import mo_math
+from adr.sources import SourceHandler
 from adr import configuration as adr_configuration
 from adr.configuration import Configuration, CustomCacheManager
 from adr.errors import MissingDataError
 from adr.util.cache_stores import S3Store
-from mo_http import http
-from mozci.push import make_push_objects
-
-import mo_math
 from jx_bigquery import bigquery
 from jx_python import jx
 from logs import capture_logging, capture_loguru
@@ -30,15 +27,16 @@ from mo_dots import (
     Data,
     coalesce,
     listwrap,
-    wrap,
     concat_field,
     set_default,
     to_data)
+from mo_http import http
 from mo_json import value2json, json2value
 from mo_logs import startup, constants, Log
 from mo_threads import Process, Till
 from mo_threads.repeat import Repeat
 from mo_times import Date, Duration, Timer, MINUTE
+from mozci.push import make_push_objects
 from pyLibrary.env import git
 from pyLibrary.meta import extend
 
@@ -315,6 +313,12 @@ def main():
         if config.taskcluster:
            inject_secrets(config)
 
+        @extend(SourceHandler)
+        def update(self, sources):
+            self._sources = []
+            for source in set(listwrap(sources)):
+                self.load_source(source)
+
         @extend(Configuration)
         def update(self, config):
             """
@@ -337,6 +341,9 @@ def main():
                 if store.path and not store.path.endswith("/"):
                     # REQUIRED, OTHERWISE FileStore._create_cache_directory() WILL LOOK AT PARENT DIRECTORY
                     store.path = store.path + "/"
+            with Timer("setup adr source of {{path}}", {"path":config.sources}):
+                adr.sources.update(config.sources)
+
 
         if SHOW_S3_CACHE_HIT:
             s3_get = S3Store._get
@@ -348,14 +355,7 @@ def main():
                         timer.verbose = True
                     return output
 
-        # UPDATE ADR CONFIGURATION
-        with Repeat("waiting for ADR", every="10second"):
-            adr.config.update(config.adr)
-            # DUMMY TO TRIGGER CACHE
-            make_push_objects(
-                from_date=Date.today().format(), to_date=Date.now().format(), branch="autoland"
-            )
-
+        adr.config.update(config.adr)
         outatime = Till(seconds=Duration(MAX_RUNTIME).total_seconds())
         outatime.then(lambda: Log.alert("Out of time, exit early"))
         Schedulers(config).process(outatime)

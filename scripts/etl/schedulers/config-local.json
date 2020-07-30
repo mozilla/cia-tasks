@@ -46,7 +46,8 @@
           "path": ".cache"
         },
       }
-    }
+    },
+    "sources": "vendor/mozci"
   },
   "constants": {
     "jx_bigquery.bigquery.DEBUG": true,
