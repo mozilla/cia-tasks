@@ -37,7 +37,7 @@
   },
   "adr": {
     "verbose": 0,
-    url: "https://activedata.allizom.org/query",
+    "url": "https://activedata.allizom.org/query",
     "cache": {
       "retention": 10080,  // minutes
       "stores": {
@@ -53,6 +53,7 @@
     "mozci.util.req.DEFAULT_RETRIES": 5,
     "mozci.util.req.DEFAULT_BACKOFF_FACTOR": 5,
     "logs.LOG_LEVEL": 10,  //10=DEBUG, 20=INFO
+    "mo_http.http.default_headers": {"Referer": "https://github.com/mozilla/cia-tasks/tree/etl-schedulers/scripts/etl/schedulers"}
   },
   "debug": {
     "trace": true

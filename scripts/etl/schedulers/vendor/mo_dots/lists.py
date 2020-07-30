@@ -12,43 +12,31 @@ from __future__ import absolute_import, division, unicode_literals
 import types
 from copy import deepcopy
 
-from mo_future import generator_types, text, first
+from mo_future import generator_types, first, is_text
+from mo_imports import expect, delay_import
 
-from mo_dots import CLASS, coalesce, unwrap, wrap
-from mo_dots.nones import Null
+from mo_dots.utils import CLASS
 
-LIST = text("list")
+Log = delay_import("mo_logs.Log")
+datawrap, coalesce, list_to_data, to_data, from_data, Null = expect("datawrap", "coalesce", "list_to_data", "to_data", "from_data", "Null")
 
+
+_list = str("list")
 _get = object.__getattribute__
-_get_list = lambda self: _get(self, LIST)
 _set = object.__setattr__
 _emit_slice_warning = True
-_datawrap = None
-Log = None
 
 
-def _late_import():
-    global _datawrap
-    global Log
-
-    from mo_dots.objects import datawrap as _datawrap
-
-    try:
-        from mo_logs import Log
-    except Exception:
-        from mo_dots.utils import PoorLogger as Log
-
-    _ = _datawrap
+def _get_list(self):
+    return _get(self, _list)
 
 
-class FlatList(list):
+class FlatList(object):
     """
     ENCAPSULATES HANDING OF Nulls BY wrapING ALL MEMBERS AS NEEDED
     ENCAPSULATES FLAT SLICES ([::]) FOR USE IN WINDOW FUNCTIONS
     https://github.com/klahnakoski/mo-dots/tree/dev/docs#flatlist-is-flat
     """
-
-    EMPTY = None
 
     def __init__(self, vals=None):
         """ USE THE vals, NOT A COPY """
@@ -64,8 +52,6 @@ class FlatList(list):
         if _get(index, CLASS) is slice:
             # IMPLEMENT FLAT SLICES (for i not in range(0, len(self)): assert self[i]==None)
             if index.step is not None:
-                if not Log:
-                    _late_import()
                 Log.error(
                     "slice step must be None, do not know how to deal with values"
                 )
@@ -85,53 +71,49 @@ class FlatList(list):
 
         if not isinstance(index, int) or index < 0 or len(_get_list(self)) <= index:
             return Null
-        return wrap(_get_list(self)[index])
+        return to_data(_get_list(self)[index])
 
     def __setitem__(self, i, y):
-        try:
-            _list = _get_list(self)
+        _list = _get_list(self)
+        if is_text(i):
+            for v in _list:
+                to_data(v)[i] = y
+            return
+        elif isinstance(i, int):
             if i <= len(_list):
                 for i in range(len(_list), i):
                     _list.append(None)
-            _list[i] = unwrap(y)
-        except Exception as e:
-            if not Log:
-                _late_import()
-            Log.error("problem", cause=e)
+            _list[i] = from_data(y)
+        else:
+            Log.error("can not set index of type {{type}}", type=i.__class__.__name__)
 
-    def __getattribute__(self, key):
-        try:
-            if key != "index":  # WE DO NOT WANT TO IMPLEMENT THE index METHOD
-                output = _get(self, key)
-                return output
-        except Exception as e:
-            if key[0:2] == "__":  # SYSTEM LEVEL ATTRIBUTES CAN NOT BE USED FOR SELECT
-                raise e
-        return FlatList.get(self, key)
+    def __getattr__(self, key):
+        if key in ["__json__", "__call__"]:
+            raise AttributeError()
+        return self.get(key)
 
     def get(self, key):
         """
         simple `select`
         """
-        if not Log:
-            _late_import()
-        return FlatList(
-            vals=[unwrap(coalesce(_datawrap(v), Null)[key]) for v in _get_list(self)]
-        )
+        output = []
+        for v in _get_list(self):
+            element = coalesce(datawrap(v), Null).get(key)
+            if element.__class__ == FlatList:
+                output.extend(from_data(element))
+            else:
+                output.append(from_data(element))
+        return list_to_data(output)
 
     def select(self, key):
-        if not Log:
-            _late_import()
         Log.error("Not supported.  Use `get()`")
 
     def filter(self, _filter):
         return FlatList(
-            vals=[unwrap(u) for u in (wrap(v) for v in _get_list(self)) if _filter(u)]
+            vals=[from_data(u) for u in (to_data(v) for v in _get_list(self)) if _filter(u)]
         )
 
     def __delslice__(self, i, j):
-        if not Log:
-            _late_import()
         Log.error(
             "Can not perform del on slice: modulo arithmetic was performed on the parameters.  You can try using clear()"
         )
@@ -140,14 +122,14 @@ class FlatList(list):
         self.list = []
 
     def __iter__(self):
-        temp = [wrap(v) for v in _get_list(self)]
+        temp = [to_data(v) for v in _get_list(self)]
         return iter(temp)
 
     def __contains__(self, item):
         return list.__contains__(_get_list(self), item)
 
     def append(self, val):
-        _get_list(self).append(unwrap(val))
+        _get_list(self).append(from_data(val))
         return self
 
     def __str__(self):
@@ -161,8 +143,6 @@ class FlatList(list):
 
         if _emit_slice_warning:
             _emit_slice_warning = False
-            if not Log:
-                _late_import()
             Log.warning(
                 "slicing is broken in Python 2.7: a[i:j] == a[i+len(a), j] sometimes. Use [start:stop:step] (see "
                 "https://github.com/klahnakoski/mo-dots/tree/dev/docs#the-slice-operator-in-python27-is-inconsistent"
@@ -181,7 +161,7 @@ class FlatList(list):
 
     def __deepcopy__(self, memo):
         d = _get_list(self)
-        return wrap(deepcopy(d, memo))
+        return to_data(deepcopy(d, memo))
 
     def remove(self, x):
         _get_list(self).remove(x)
@@ -190,22 +170,20 @@ class FlatList(list):
     def extend(self, values):
         lst = _get_list(self)
         for v in values:
-            lst.append(unwrap(v))
+            lst.append(from_data(v))
         return self
 
     def pop(self, index=None):
         if index is None:
-            return wrap(_get_list(self).pop())
+            return to_data(_get_list(self).pop())
         else:
-            return wrap(_get_list(self).pop(index))
+            return to_data(_get_list(self).pop(index))
 
     def __eq__(self, other):
         lst = _get_list(self)
-        if other == None and len(lst) == 0:
-            return True
-        other_class = _get(other, CLASS)
-        if other_class is FlatList:
-            other = _get_list(other)
+        if other == None:
+            return len(lst) == 0
+
         try:
             if len(lst) != len(other):
                 return False
@@ -248,7 +226,7 @@ class FlatList(list):
 
         return FlatList(_get_list(self)[-num:])
 
-    def left(self, num=None):
+    def limit(self, num=None):
         """
         NOT REQUIRED, BUT EXISTS AS OPPOSITE OF right()
         """
@@ -266,7 +244,7 @@ class FlatList(list):
         if num == None:
             return self
         if num <= 0:
-            return FlatList.EMPTY
+            return Null
 
         return FlatList(_get_list(self)[:-num:])
 
@@ -287,7 +265,7 @@ class FlatList(list):
         """
         lst = _get_list(self)
         if lst:
-            return wrap(lst[-1])
+            return to_data(lst[-1])
         return Null
 
     def map(self, oper, includeNone=True):
@@ -318,14 +296,13 @@ def last(values):
     return values
 
 
-FlatList.EMPTY = Null
-
 list_types = (list, FlatList)
 container_types = (list, FlatList, set)
 sequence_types = (list, FlatList, tuple) + generator_types
 many_types = tuple(set(list_types + container_types + sequence_types))
 
-not_many_names = ("str", "unicode", "binary", "NullType", "NoneType", "dict", "Data")  # ITERATORS THAT ARE CONSIDERED PRIMITIVE
+# ITERATORS THAT ARE CONSIDERED PRIMITIVE
+not_many_names = ("str", "unicode", "binary", "NullType", "NoneType", "dict", "Data")
 
 
 def is_list(l):
@@ -355,9 +332,9 @@ def is_many(value):
         return True
 
     if issubclass(type_, types.GeneratorType):
-        if not Log:
-            _late_import()
         many_types = many_types + (type_,)
         Log.warning("is_many() can not detect generator {{type}}", type=type_.__name__)
         return True
     return False
+
+

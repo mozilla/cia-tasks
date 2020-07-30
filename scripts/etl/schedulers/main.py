@@ -11,12 +11,15 @@ from __future__ import unicode_literals
 
 import os
 
+from mo_future import first
+
 import adr
 import taskcluster
 from adr import configuration as adr_configuration
 from adr.configuration import Configuration, CustomCacheManager
 from adr.errors import MissingDataError
 from adr.util.cache_stores import S3Store
+from mo_http import http
 from mozci.push import make_push_objects
 
 import mo_math
@@ -30,7 +33,7 @@ from mo_dots import (
     wrap,
     concat_field,
     set_default,
-)
+    to_data)
 from mo_json import value2json, json2value
 from mo_logs import startup, constants, Log
 from mo_threads import Process, Till
@@ -71,9 +74,10 @@ def inject_secrets(config):
         set_default(config, acc)
 
 
+
 class Schedulers:
     def __init__(self, config):
-        self.config = config = wrap(config)
+        self.config = config = to_data(config)
         config.range.min = Date(config.range.min)
         config.range.max = Date(config.range.max)
         config.start = Date(config.start)
@@ -118,6 +122,54 @@ class Schedulers:
                     return line[9:].strip()
             return None
 
+    def get_task_details(self, push):
+
+        task_timings = http.get_json(
+            self.config.adr.url,
+            timeout=60 * 5,
+            json={
+                "from": "task",
+                "select": [
+                    {"name":"id", "value":"task.id"},
+                    {"name": "label", "value": "run.name"},
+                    {"name": "start_time", "value": "task.run.start_time"},
+                    {"name": "end_time", "value": "task.run.end_time"},
+                ],
+                "where": [{"eq": {"repo.push.id": push.id}}, {"eq": {"repo.branch.name": push.branch}}],
+                "format": "list",
+                "limit": 100000
+            }
+        )
+
+        tasks = {task.id: task for task in task_timings.data}
+
+        for _, tasks_ in jx.chunk((t for t in push.tasks if t.label.startswith("test-")), 10):
+            chunk_of_tasks_timings = http.get_json(
+                self.config.adr.url,
+                timeout=60 * 5,
+                json={
+                    "from": "unittest",
+                    "select": [
+                        {"name": "start_time", "value": "action.start_time", "aggregate": "min"},
+                        {"name": "end_time", "value": "action.end_time", "aggregate": "max"}
+                    ],
+                    "groupby": [
+                        {"name":"task_id", "value":"task.id"},
+                        {"name": "name", "value": "result.group"}
+                    ],
+                    "where": [{"in": {"task.id": tasks_.id}}],
+                    "format": "list",
+                    "limit": 10000
+                }
+            )
+            for g, groups in jx.groupby(chunk_of_tasks_timings.data, "task_id"):
+                task = tasks[g.task_id]
+                task.groups = groups
+                task.groups.task_id = None
+
+        return list(tasks.values())
+
+
     def process_chunk(self, start, end, branch, please_stop):
         """
         :param start: begin time range
@@ -154,7 +206,7 @@ class Schedulers:
                 if please_stop:
                     break
 
-                with Timer("get tasks for push {{push}}", {"push": push.id}):
+                with Timer("get scheduler tasks for push {{push}}", {"push": push.id}):
                     try:
                         schedulers = [
                             label.split("shadow-scheduler-")[1]
@@ -186,6 +238,8 @@ class Schedulers:
                         "could not get regressions for {{push}}", push=push.id, cause=e
                     )
 
+                tasks = self.get_task_details(push)
+
                 # RECORD THE PUSH
                 data.append(
                     {
@@ -195,6 +249,7 @@ class Schedulers:
                             "changesets": push.revs,
                             "backedoutby": push.backedoutby,
                         },
+                        "tasks": tasks,
                         "schedulers": scheduler,
                         "regressions": [
                             {"label": name} for name in jx.sort(regressions)

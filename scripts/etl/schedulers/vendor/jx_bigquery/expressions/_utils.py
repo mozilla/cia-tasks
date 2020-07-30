@@ -9,8 +9,6 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from jx_base.language import Language
-
 from jx_base.expressions import (
     FALSE,
     FalseOp,
@@ -18,12 +16,9 @@ from jx_base.expressions import (
     NullOp,
     TrueOp,
     extend,
-)
-from mo_dots import wrap, FlatList, is_data
-from mo_future import decorate
-from mo_json import BOOLEAN, NESTED, OBJECT, STRING, NUMBER, IS_NULL
-from mo_logs import Log
-from mo_sql import (
+    TRUE)
+from jx_base.language import Language
+from jx_bigquery.sql import (
     SQL,
     SQL_FALSE,
     SQL_NULL,
@@ -35,8 +30,13 @@ from mo_sql import (
     SQL_STAR,
     SQL_LT,
 )
+from mo_dots import wrap
+from mo_future import decorate
+from mo_imports import expect
+from mo_json import BOOLEAN, NESTED, OBJECT, STRING, NUMBER, IS_NULL
+from mo_logs import Log
 
-NumberOp, OrOp, BQLScript = [None] * 3
+NumberOp, OrOp, BQLScript = expect("NumberOp", "OrOp", "BQLScript")
 
 
 def check(func):
@@ -48,48 +48,57 @@ def check(func):
     def to_bq(self, schema, not_null=False, boolean=False, **kwargs):
         if kwargs.get("many") != None:
             Log.error("not expecting many")
-        try:
-            output = func(self, schema, not_null, boolean)
-        except Exception as e:
-            Log.error("not expected", cause=e)
-        if isinstance(output, BQLScript):
-            return output
-        if not isinstance(output, FlatList):
-            Log.error("expecting FlatList")
-        if not is_data(output[0].sql):
-            Log.error("expecting Data")
-        for k, v in output[0].sql.items():
-            if k not in {"b", "n", "s", "j", "0"}:
-                Log.error("expecting datatypes")
-            if not isinstance(v, SQL):
-                Log.error("expecting text")
-        return output
+        output = func(self, schema, not_null, boolean)
+        if not isinstance(output, BQLScript):
+            Log.error("Expecting BQLScript")
 
+        return output
     return to_bq
 
 
 @extend(NullOp)
 @check
 def to_bq(self, schema, not_null=False, boolean=False):
-    return wrap([{"name": ".", "sql": {"0": SQL_NULL}}])
+    return BQLScript(
+        data_type=BOOLEAN,
+        expr=SQL_NULL,
+        frum=self,
+        miss=TRUE,
+        many=False,
+        schema=schema
+    )
 
 
 @extend(TrueOp)
 @check
 def to_bq(self, schema, not_null=False, boolean=False):
-    return wrap([{"name": ".", "sql": {"b": SQL_TRUE}}])
+    return BQLScript(
+        data_type=BOOLEAN,
+        expr=SQL_TRUE,
+        frum=self,
+        miss=FALSE,
+        many=False,
+        schema=schema
+    )
 
 
 @extend(FalseOp)
 @check
 def to_bq(self, schema, not_null=False, boolean=False):
-    return wrap([{"name": ".", "sql": {"b": SQL_FALSE}}])
+    return BQLScript(
+        data_type=BOOLEAN,
+        expr=SQL_FALSE,
+        frum=self,
+        miss=FALSE,
+        many=False,
+        schema=schema
+    )
 
 
 def _inequality_to_bq(self, schema, not_null=False, boolean=False, many=True):
     op, identity = _sql_operators[self.op]
-    lhs = NumberOp(self.lhs).partial_eval().to_bq(schema, not_null=True)[0].sql.n
-    rhs = NumberOp(self.rhs).partial_eval().to_bq(schema, not_null=True)[0].sql.n
+    lhs = NumberOp(self.lhs).partial_eval().to_bq(schema, not_null=True)
+    rhs = NumberOp(self.rhs).partial_eval().to_bq(schema, not_null=True)
     sql = sql_iso(lhs) + op + sql_iso(rhs)
 
     output = BQLScript(

@@ -9,8 +9,6 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from copy import copy
-
 from google.cloud.bigquery import SchemaField
 
 import jx_base
@@ -25,14 +23,13 @@ from jx_bigquery.typed_encoder import (
     json_type_to_inserter_type,
 )
 from jx_python import jx
-from mo_dots import join_field, startswith_field, coalesce, Data, wrap, split_field, Null
+from mo_dots import join_field, startswith_field, coalesce, Data, wrap, split_field
 from mo_future import is_text, first, sort_using_key, text, OrderedDict
-from mo_json import NESTED, STRUCT, OBJECT, STRING, NUMBER, scrub
+from mo_json import NESTED, STRUCT, OBJECT, STRING, NUMBER
 from mo_logs import Log, Except
 from mo_times.dates import Date
 
-
-DEBUG = True
+DEBUG = False
 
 
 class Snowflake(jx_base.Snowflake):
@@ -107,6 +104,7 @@ class Snowflake(jx_base.Snowflake):
                         es_index=self.es_index,
                         es_type="RECORD",
                         jx_type=OBJECT,
+                        cardinality=1,
                         nested_path=nested_path,
                         last_updated=now,
                     )
