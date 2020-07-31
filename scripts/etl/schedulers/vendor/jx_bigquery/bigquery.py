@@ -14,45 +14,29 @@ from copy import copy
 
 from google.cloud import bigquery
 from google.oauth2 import service_account
-from jx_base import Container, Facts
-from jx_python import jx
-from mo_dots import listwrap, unwrap, join_field, Null, is_data, Data, wrap, set_default
-from mo_future import is_text, text, first
+from jx_base import Container as BaseContainer, Facts as BaseFacts
+from mo_dots import (
+    listwrap,
+    unwrap,
+    join_field,
+    Null,
+    is_data,
+    Data,
+    set_default,
+    dict_to_data,
+    leaves_to_data,
+    from_data,
+)
 from mo_json import INTEGER
 from mo_kwargs import override
-from mo_logs import Log, Except
-from mo_math.randoms import Random
-from mo_sql import (
-    ConcatSQL,
-    SQL,
-    SQL_SELECT,
-    JoinSQL,
-    SQL_NULL,
-    SQL_FROM,
-    SQL_COMMA,
-    SQL_AS,
-    SQL_ORDERBY,
-    SQL_CR,
-    SQL_SELECT_AS_STRUCT,
-    SQL_INSERT,
-    SQL_DESC,
-    SQL_UNION_ALL,
-)
-from mo_threads import Till
+from mo_logs import Except
+from mo_math import ceiling, randoms
+from mo_threads import Till, Lock, Queue
 from mo_times import MINUTE, Timer
-from mo_times.dates import Date
 
 from jx_bigquery import snowflakes
 from jx_bigquery.snowflakes import Snowflake
-from jx_bigquery.sql import (
-    quote_column,
-    ALLOWED,
-    sql_call,
-    sql_alias,
-    escape_name,
-    ApiName,
-    sql_query,
-)
+from jx_bigquery.sql import *
 from jx_bigquery.typed_encoder import (
     NESTED_TYPE,
     typed_encode,
@@ -91,7 +75,7 @@ def find_dataset(dataset, client):
             return _dataset.reference
 
 
-class Dataset(Container):
+class Dataset(BaseContainer):
     """
     REPRESENT A BIGQUERY DATASET; aka A CONTAINER FOR TABLES; aka A DATABASE
     """
@@ -126,7 +110,7 @@ class Dataset(Container):
             return Table(kwargs=kwargs, container=self)
         except Exception as e:
             e = Except.wrap(e)
-            if "Not found: Table" in e:
+            if not read_only and "Not found: Table" in e:
                 return self.create_table(kwargs)
             Log.error("could not get table {{table}}", table=table, cause=e)
 
@@ -202,7 +186,7 @@ class Dataset(Container):
             Log.error("Can not create a table for read-only use")
 
         if sharded:
-            shard_name = escape_name(table + "_" + "".join(Random.sample(ALLOWED, 20)))
+            shard_name = escape_name(table + "_" + "".join(randoms.sample(ALLOWED, 20)))
             shard_api_name = self.full_name + shard_name
             _shard = bigquery.Table(text(shard_api_name), schema=flake.to_bq_schema())
             _shard.time_partitioning = unwrap(flake._partition.bq_time_partitioning)
@@ -221,7 +205,7 @@ class Dataset(Container):
                 l.es_column for f in listwrap(cluster) for l in flake.leaves(f)
             ] or None
             self.client.create_table(_table)
-            Log.note("created table {{table}}", table=_table.table_id)
+            DEBUG and Log.note("created table {{table}}", table=_table.table_id)
 
         return Table(
             table=table,
@@ -239,7 +223,7 @@ class Dataset(Container):
             SQL("CREATE VIEW\n"),
             quote_column(view_api_name),
             SQL_AS,
-            sql_query({"from": shard_api_name}),
+            SQL(f"SELECT * FROM {quote_column(shard_api_name)}"),
         )
         job = self.query_and_wait(sql)
         if job.errors:
@@ -264,7 +248,7 @@ class Dataset(Container):
         return job
 
 
-class Table(Facts):
+class Table(BaseFacts):
     @override
     def __init__(
         self,
@@ -346,15 +330,39 @@ class Table(Facts):
                 )
 
         self.last_extend = Date.now() - EXTEND_LIMIT
+        self.extend_locker = Lock()
+        self.extend_queue = Queue("wait for extend")
 
     def all_records(self):
         """
         MOSTLY FOR TESTING, RETURN ALL RECORDS IN TABLE
         :return:
         """
-        sql = sql_query({"from": self.full_name})
-        query_job = self.container.client.query(text(sql))
+        return self.sql_query(sql_query({"from": text(self.full_name)}, self.schema))
 
+    def jx_query(self, jx_query):
+        docs = self.sql_query(
+            sql_query(
+                dict_to_data({"from": text(self.full_name)}) | jx_query, self.schema
+            )
+        )
+        data = []
+        for d in docs:
+            u = untyped(from_data(leaves_to_data(d)))
+            data.append(u)
+
+        return Data(data=data, format="list")
+
+    @property
+    def schema(self):
+        return self._flake
+
+    def sql_query(self, sql):
+        """
+        :param sql: SQL QUERY
+        :return: GENERATOR OF DOCUMENTS as dict
+        """
+        query_job = self.container.query_and_wait(sql)
         # WE WILL REACH INTO THE _flake, SINCE THIS IS THE FIRST PLACE WE ARE ACTUALLY PULLING RECORDS OUT
         # TODO: WITH MORE CODE THIS LOGIC GOES ELSEWHERE
         _ = self._flake.columns  # ENSURE schema HAS BEEN PROCESSED
@@ -376,7 +384,10 @@ class Table(Facts):
                 # INSERT TOP LEVEL FIELDS
                 reach = wrap(output)
                 for k, p in top2deep.items():
-                    reach[p] = doc[k]
+                    try:
+                        reach[p] = doc.get(k)
+                    except Exception as cause:
+                        raise cause
                 yield untyped(output)
 
     @property
@@ -385,14 +396,20 @@ class Table(Facts):
 
     def _create_new_shard(self):
         primary_shard = self.container.create_table(
-            table=self.short_name + "_" + "".join(Random.sample(ALLOWED, 20)),
+            table=self.short_name + "_" + "".join(randoms.sample(ALLOWED, 20)),
             sharded=False,
             schema=self._flake.schema,
             kwargs=self.config,
         )
         self.shard = primary_shard.shard
 
-    def extend(self, rows):
+    def extend(self, docs):
+        self.extend_queue.extend(docs)
+        with self.extend_locker:
+            docs = self.extend_queue.pop_all()
+            self._extend(docs)
+
+    def _extend(self, rows):
         if self.read_only:
             Log.error("not for writing")
         if len(rows) == 0:
@@ -400,18 +417,18 @@ class Table(Facts):
 
         try:
             update = {}
-            with Timer("encoding"):
+            with Timer("encoding", verbose=DEBUG):
                 while True:
-                    output = []
+                    typed_rows = []
                     for rownum, row in enumerate(rows):
-                        typed, more, add_nested = typed_encode(row, self.flake)
+                        typed_row, more, add_nested = typed_encode(row, self.flake)
                         set_default(update, more)
                         if add_nested:
                             # row HAS NEW NESTED COLUMN!
                             # GO OVER THE rows AGAIN SO "RECORD" GET MAPPED TO "REPEATED"
                             DEBUG and Log.note("New nested documnet found, retrying")
                             break
-                        output.append(typed)
+                        typed_rows.append(typed_row)
                     else:
                         break
 
@@ -419,21 +436,23 @@ class Table(Facts):
                 # BATCH HAS ADDITIONAL COLUMNS!!
                 # WE CAN NOT USE THE EXISTING SHARD, MAKE A NEW ONE:
                 self._create_new_shard()
-                Log.note(
+                DEBUG and Log.note(
                     "added new shard with name: {{shard}}", shard=self.shard.table_id
                 )
-            with Timer("insert {{num}} rows to bq", param={"num": len(rows)}):
+            with Timer(
+                "insert {{num}} rows to bq", param={"num": len(rows)}, verbose=DEBUG
+            ):
                 failures = self.container.client.insert_rows_json(
                     self.shard,
-                    json_rows=output,
-                    row_ids=[None] * len(output),
+                    json_rows=typed_rows,
+                    row_ids=[None] * len(typed_rows),
                     skip_invalid_rows=False,
                     ignore_unknown_values=False,
                 )
             if failures:
                 if all(r == "stopped" for r in wrap(failures).errors.reason):
                     self._create_new_shard()
-                    Log.note(
+                    DEBUG and Log.note(
                         "STOPPED encountered: Added new shard with name: {{shard}}",
                         shard=self.shard.table_id,
                     )
@@ -444,30 +463,52 @@ class Table(Facts):
                 )
             else:
                 self.last_extend = Date.now()
-                Log.note("{{num}} rows added", num=len(output))
-        except Exception as e:
-            e = Except.wrap(e)
+                DEBUG and Log.note("{{num}} rows added", num=len(typed_rows))
+        except Exception as cause:
+            cause = Except.wrap(cause)
             if (
-                len(output) < 2
-                and "Your client has issued a malformed or illegal request." in e
+                len(typed_rows) < 2
+                and "Your client has issued a malformed or illegal request." in cause
             ):
                 Log.error(
                     "big query complains about:\n{{data|json}}",
-                    data=output,
-                    cause=e
+                    data=typed_rows,
+                    cause=cause,
                 )
             elif len(rows) > 1 and (
-                "Request payload size exceeds the limit" in e
-                or "An existing connection was forcibly closed by the remote host" in e
-                or "Your client has issued a malformed or illegal request." in e
+                "Request payload size exceeds the limit" in cause
+                or "An existing connection was forcibly closed by the remote host"
+                in cause
+                or "Your client has issued a malformed or illegal request." in cause
+                or "BrokenPipeError(32, 'Broken pipe')" in cause
+                or "ConnectionResetError(104, 'Connection reset by peer')" in cause
             ):
-                # TRY A SMALLER BATCH
-                cut = len(rows) // 2
-                self.extend(rows[:cut])
-                self.extend(rows[cut:])
-                return
+                Log.warning(
+                    "problem with batch of size {{size}}", size=len(rows), cause=cause
+                )
+                batch_size = ceiling(len(rows) / 10)
+                try:
+                    DEBUG and Log.note(
+                        "attempt smaller batches of size {{batch_size}}",
+                        batch_size=batch_size,
+                    )
+                    for _, chunk in jx.chunk(rows, batch_size):
+                        self._extend(chunk)
+                    return
+                except Exception as cause2:
+                    Log.error(
+                        "smaller batches of size {{batch_size}} did not work",
+                        batch_size=batch_size,
+                        cause=cause2,
+                    )
+            elif len(rows) == 1:
+                Log.error(
+                    "Could not insert document\n{{doc|json|indent}}",
+                    doc=rows[0],
+                    cause=cause,
+                )
             else:
-                Log.error("Do not know how to handle", cause=e)
+                Log.error("Do not know how to handle", cause=cause)
 
     def add(self, row):
         self.extend([row])
@@ -527,7 +568,7 @@ class Table(Facts):
                     del shard_flakes[i]
                     break
         else:
-            name = self.short_name + "_" + "".join(Random.sample(ALLOWED, 20))
+            name = self.short_name + "_" + "".join(randoms.sample(ALLOWED, 20))
             primary_shard_name = escape_name(name)
             self.container.create_table(
                 table=name,
@@ -549,7 +590,9 @@ class Table(Facts):
             )
             selects.append(q)
 
-        Log.note("inserting into table {{table}}", table=text(primary_shard_name))
+        DEBUG and Log.note(
+            "inserting into table {{table}}", table=text(primary_shard_name)
+        )
         matched = []
         unmatched = []
         for sel, shard, flake in zip(selects, shards, shard_flakes):
@@ -569,17 +612,22 @@ class Table(Facts):
                         (
                             sql_query(
                                 {
-                                    "from": self.container.full_name
-                                    + ApiName(shard.table_id)
-                                }
+                                    "from": text(
+                                        self.container.full_name
+                                        + ApiName(shard.table_id)
+                                    )
+                                },
+                                schema,
                             )
-                            for _, shard, _ in merge_chunk
+                            for _, shard, schema in merge_chunk
                         ),
                     ),
                 )
                 DEBUG and Log.note("{{sql}}", sql=text(command))
                 job = self.container.query_and_wait(command)
-                Log.note("job {{id}} state = {{state}}", id=job.job_id, state=job.state)
+                DEBUG and Log.note(
+                    "job {{id}} state = {{state}}", id=job.job_id, state=job.state
+                )
 
                 if job.errors:
                     Log.error(
@@ -596,7 +644,7 @@ class Table(Facts):
                 command = ConcatSQL(SQL_INSERT, quote_column(primary_full_name), s)
                 DEBUG and Log.note("{{sql}}", sql=text(command))
                 job = self.container.query_and_wait(command)
-                Log.note(
+                DEBUG and Log.note(
                     "from {{shard}}, job {{id}}, state {{state}}",
                     id=job.job_id,
                     shard=shard.table_id,
@@ -650,7 +698,6 @@ class Table(Facts):
             ],
         )
         # WRAP WITH etl.timestamp BEST SELECTION
-
         self.container.query_and_wait(
             ConcatSQL(
                 SQL(  # SOME KEYWORDS: ROWNUM RANK
@@ -675,9 +722,9 @@ def _extract_primary_shard_name(view_sql):
 def gen_select(total_flake, flake):
     """
     GENERATE SELECT CLAUSE
-    :param total_flake:
-    :param flake:
-    :return:
+    :param total_flake:  THE DESTINATION SCHEMA TO MATCH
+    :param flake:  THE SCHEMA SELECTING FROM
+    :return:  SQL
     """
 
     def _gen_select(

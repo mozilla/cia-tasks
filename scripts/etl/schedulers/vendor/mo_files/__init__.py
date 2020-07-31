@@ -7,6 +7,8 @@
 #
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
+from __future__ import absolute_import, division, unicode_literals
+
 import base64
 import io
 import os
@@ -22,7 +24,7 @@ from mo_files.url import URL
 from mo_future import PY3, text, is_text
 from mo_logs import Except, Log
 from mo_logs.exceptions import get_stacktrace
-from mo_math.randoms import Random
+from mo_math import randoms
 
 
 class File(object):
@@ -46,8 +48,8 @@ class File(object):
         """
         if isinstance(filename, File):
             return
-        if not isinstance(filename, text):
-            Log.error('Expecting string, not {{type}}', type=type(filename).__name__)
+        elif not isinstance(filename, (str, text)):
+            Log.error('Expecting str, not {{type}}', type=type(filename).__name__)
 
         self.key = base642bytearray(key)
         self._mime_type = mime_type
@@ -469,7 +471,7 @@ class TempFile(File):
     def __init__(self, filename=None):
         if isinstance(filename, File):
             return
-        self.temp = NamedTemporaryFile(prefix=Random.filename(), delete=False)
+        self.temp = NamedTemporaryFile(prefix=randoms.filename(), delete=False)
         self.temp.close()
         File.__init__(self, self.temp.name)
 

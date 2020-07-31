@@ -8,3 +8,5 @@ __pycache__
 /scripts/etl/schedulers/vendor/mo_times/vendor/dateutil/zoneinfo
 .pem
 /scripts/etl/deviant-noise/requirements.txt
+/scripts/etl/schedulers/vendor/mozci
+/scripts/etl/schedulers/vendor/adr

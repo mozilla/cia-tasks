@@ -8,15 +8,15 @@
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
+
 import string
 from enum import EnumMeta
 
 import mo_math
 from jx_bigquery.sql import escape_name, TIMESTAMP_FORMAT, unescape_name, ApiName
 from jx_python import jx
-from mo_dots import is_many, is_data, wrap, split_field, join_field, Data, SLOT, FlatList, NullType, DataObject, \
-    set_default
-from mo_future import is_text, text, generator_types
+from mo_dots import is_many, is_data, split_field, join_field, set_default, to_data
+from mo_future import is_text, text
 from mo_json import (
     BOOLEAN,
     NUMBER,
@@ -28,7 +28,7 @@ from mo_json import (
     INTERVAL,
     TIME,
 )
-from mo_logs import Log, Except
+from mo_logs import Log
 from mo_times.dates import parse
 
 ALLOWED = string.ascii_letters + string.digits
@@ -39,7 +39,6 @@ def typed_encode(value, flake):
     RETURN (typed_value, flake_update, added_nested) TUPLES
     :param value: THE RECORD TO CONVERT TO STRICT TYPED FORM
     :param flake: LOOKUP SCHEMA, WILL BE UPDATED WITH CHANGES
-    :param top_level_fields: MAP TO TOP LEVEL FIELDS
     :return: (record, update, nested) TUPLE
     """
     _ = flake.columns  # ENSURE WE HAVE INTERNAL STRUCTURES FILLED
@@ -49,7 +48,7 @@ def typed_encode(value, flake):
         flake._columns = None
         _ = flake.columns
 
-    worker = wrap(output)
+    worker = to_data(output)
     for path, field in flake._top_level_fields.items():
         worker[field] = worker[path]
         worker[path] = None
@@ -58,7 +57,8 @@ def typed_encode(value, flake):
         _path = split_field(path)
         for i, _ in jx.reverse(enumerate(_path)):
             sub_path = join_field(_path[:i])
-            if not worker[sub_path].keys():
+            v = worker[sub_path]
+            if is_data(v) and not worker[sub_path].keys():
                 worker[sub_path] = None
             else:
                 break
@@ -166,6 +166,13 @@ def schema_type(value):
     else:
         v = value
     return v, json_type_to_inserter_type[jt], jt
+
+
+def untype_path(path):
+    """
+    EXPECTING PYTHON-SIDE PATH (WITHOUT __ ESCAPING)
+    """
+    return join_field(c for c in split_field(path) if c not in typed_to_bq_type)
 
 
 def untyped(value):

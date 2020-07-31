@@ -15,7 +15,7 @@ from jx_bigquery.expressions.length_op import LengthOp
 from jx_bigquery.expressions.bql_script import BQLScript
 from mo_dots import coalesce
 from mo_json import STRING
-from mo_sql import (
+from jx_bigquery.sql import (
     SQL,
     SQL_CASE,
     SQL_ELSE,
@@ -28,7 +28,7 @@ from mo_sql import (
     sql_list,
     sql_concat_text,
 )
-from jx_mysql.mysql import quote_value
+from jx_bigquery.sql import quote_value
 
 
 class ConcatOp(ConcatOp_):
