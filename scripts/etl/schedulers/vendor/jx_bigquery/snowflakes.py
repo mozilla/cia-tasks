@@ -95,6 +95,7 @@ class Snowflake(jx_base.Snowflake):
                         jx_type=json_type,
                         nested_path=nested_path,
                         last_updated=now,
+                        multi=1,
                     )
                     columns.append(c)
                 else:
@@ -107,6 +108,7 @@ class Snowflake(jx_base.Snowflake):
                         cardinality=1,
                         nested_path=nested_path,
                         last_updated=now,
+                        multi=1,
                     )
                     columns.append(c)
                     count = len(columns)

@@ -28,7 +28,7 @@ from jx_bigquery.sql import (
     sql_list,
     sql_concat_text,
 )
-from jx_mysql.mysql import quote_value
+from jx_bigquery.sql import quote_value
 
 
 class ConcatOp(ConcatOp_):
