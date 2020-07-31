@@ -138,7 +138,7 @@ class Schedulers:
         tasks = {task.id: task for task in task_timings.data}
 
         for _, tasks_ in jx.chunk(
-            (t for t in push.tasks if t.label.startswith("test-")), 10
+            (t for t in push.tasks if t.label.startswith("test-")), 20
         ):
             chunk_of_tasks_timings = http.get_json(
                 self.config.adr.url,
@@ -251,7 +251,7 @@ class Schedulers:
                     "schedulers": scheduler,
                     "regressions": [{"label": name} for name in jx.sort(regressions)],
                     "branch": branch,
-                    "etl": {"revision": git.get_revision(), "timestamp": Date.now(),},
+                    "etl": {"revision": git.get_revision(), "timestamp": Date.now()},
                 })
         finally:
             # ADD WHATEVER WE HAVE
