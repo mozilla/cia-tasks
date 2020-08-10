@@ -58,20 +58,18 @@ def main(config):
     since = Date.today() - LOOK_BACK
 
     # SETUP DESTINATION
-    destination = bigquery.Dataset(config.destination).get_or_create_table(
-        config.destination
+    destination = (
+        bigquery.Dataset(config.destination).get_or_create_table(config.destination)
     )
     # ENSURE SHARDS ARE MERGED
     destination.merge_shards()
 
     # GET ALL KNOWN SERIES
     with MySQL(config.source) as t:
-        recently_updated_series = dict_to_data(
-            {
-                doc["id"]: doc
-                for doc in t.query(
-                    SQL(
-                        f"""
+
+        recently_updated_series = {
+            doc["id"]: doc
+            for doc in t.query(SQL(f"""
                 SELECT d.signature_id AS id
                 FROM (            
                     SELECT d.signature_id, d.push_timestamp
@@ -81,22 +79,18 @@ def main(config):
                     LIMIT 1000000
                 ) d
                 LEFT JOIN performance_signature s on s.id=d.signature_id
-                WHERE s.test IS NULL or s.test='' or s.test=s.suite
+                WHERE (s.test IS NULL or s.test='' or s.test=s.suite) 
                 GROUP BY d.signature_id
                 ORDER BY MAX(d.push_timestamp) DESC
-            """
-                    )
-                )
-            }
-        )
+                LIMIT 100000
+            """))
+        }
 
     # PULL PREVIOUS SERIES
-    recently_scanned = dict_to_data(
-        {
-            doc["id"]: doc
-            for doc in destination.sql_query(
-                SQL(
-                    f"""
+    recently_scanned = {
+        doc["id"]: doc
+        for doc in destination.sql_query(SQL(
+            f"""
             SELECT
                 id,
                 MAX(last_updated) as last_processed
@@ -107,10 +101,8 @@ def main(config):
             HAVING 
                 MAX(last_updated) >= {quote_value(Date.now()-STALE)}
         """
-                )
-            )
-        }
-    )
+        ))
+    }
 
     todo = [v for k, v in recently_updated_series.items() if k not in recently_scanned]
     todo = jx.reverse(jx.sort(todo, {"last_processed": "desc"})).limit(5000)
